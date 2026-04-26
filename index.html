@@ -244,6 +244,45 @@ table.cov td.mtd { text-align: left; background: var(--surface); white-space: no
 
 .info-box { font-size: 0.68rem; color: var(--muted); line-height: 1.8; max-width: 500px; background: var(--card); border: 1px solid var(--border); border-left: 3px solid var(--accent2); border-radius: 3px; padding: 14px 18px; }
 .info-box strong { color: var(--ink); }
+
+/* ── TIMER ── */
+.timer-wrap { display: flex; flex-direction: column; align-items: center; padding: 32px 20px; gap: 28px; }
+.timer-duration-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: center; }
+.timer-duration-row label { font-size: 0.6rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--muted); }
+.timer-field {
+  width: 62px; text-align: center; background: var(--bg); border: 1px solid var(--border); border-radius: 2px;
+  color: var(--ink); font-family: 'IBM Plex Mono', monospace; font-size: 1.1rem; padding: 8px 6px; outline: none; transition: border-color 0.2s;
+}
+.timer-field:focus { border-color: var(--accent2); }
+.timer-colon { font-family: 'Cormorant Garamond', serif; font-size: 1.6rem; color: var(--muted); line-height: 1; }
+.timer-ring-wrap { position: relative; display: flex; align-items: center; justify-content: center; }
+.timer-ring-wrap svg { transform: rotate(-90deg); }
+.timer-ring-bg { fill: none; stroke: var(--border); }
+.timer-ring-fill { fill: none; stroke-linecap: round; transition: stroke-dashoffset 0.5s linear, stroke 0.4s; }
+.timer-display { position: absolute; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 4px; }
+.timer-digits { font-family: 'Cormorant Garamond', serif; font-size: clamp(3rem,10vw,5.5rem); font-weight: 300; letter-spacing: -0.02em; line-height: 1; color: var(--ink); transition: color 0.4s; }
+.timer-digits.warning { color: var(--accent); }
+.timer-round-label { font-size: 0.55rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--muted); }
+.timer-status { font-size: 0.58rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); }
+.timer-controls { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+.timer-btn {
+  font-family: 'IBM Plex Mono', monospace; font-size: 0.68rem; letter-spacing: 0.14em; text-transform: uppercase;
+  padding: 13px 28px; border-radius: 2px; cursor: pointer; border: 1px solid var(--border);
+  background: transparent; color: var(--ink); transition: all 0.18s; min-width: 110px;
+}
+.timer-btn:hover { background: var(--surface); }
+.timer-btn.go { background: var(--dark); color: var(--bg); border-color: var(--dark); }
+.timer-btn.go:hover { background: #3a2e24; }
+.timer-btn.pause { background: var(--accent2); color: #fff; border-color: var(--accent2); }
+.timer-btn.pause:hover { opacity: 0.88; }
+.timer-btn.danger { border-color: var(--accent); color: var(--accent); }
+.timer-btn.danger:hover { background: var(--accent); color: #fff; }
+.timer-advance {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: center;
+  background: var(--card); border: 1px solid var(--border); border-radius: 3px;
+  padding: 14px 22px; box-shadow: var(--shadow); font-size: 0.68rem; color: var(--muted);
+}
+.timer-advance strong { color: var(--ink); }
 </style>
 </head>
 <body>
@@ -260,6 +299,7 @@ table.cov td.mtd { text-align: left; background: var(--surface); white-space: no
 <div class="tabs">
   <button class="tab active" onclick="switchTab('rounds',this)">Rounds</button>
   <button class="tab" onclick="switchTab('coverage',this)">Coverage Map</button>
+  <button class="tab" onclick="switchTab('timer',this)">Timer</button>
   <button class="tab" onclick="switchTab('setup',this)">Setup</button>
 </div>
 
@@ -316,6 +356,52 @@ table.cov td.mtd { text-align: left; background: var(--surface); white-space: no
     <div class="btn-row">
       <button class="btn accent" onclick="addRound()">+ Add Another Round</button>
       <button class="btn" onclick="exportCSV()">⬇ Export CSV</button>
+    </div>
+  </div>
+
+  <!-- TIMER -->
+  <div id="tab-timer" style="display:none">
+    <div class="timer-wrap">
+
+      <!-- Duration setter -->
+      <div class="timer-duration-row">
+        <label>Session Length</label>
+        <input class="timer-field" id="t-mins" type="number" min="0" max="99" value="" placeholder="mm" onchange="timerSetDuration()">
+        <span class="timer-colon">:</span>
+        <input class="timer-field" id="t-secs" type="number" min="0" max="59" value="" placeholder="ss" onchange="timerSetDuration()">
+        <label>mm : ss</label>
+      </div>
+
+      <!-- Ring + digits -->
+      <div class="timer-ring-wrap">
+        <svg width="260" height="260" viewBox="0 0 260 260">
+          <circle class="timer-ring-bg" cx="130" cy="130" r="114" stroke-width="8"/>
+          <circle class="timer-ring-fill" id="timer-ring" cx="130" cy="130" r="114"
+            stroke-width="8" stroke="#1a1410"
+            stroke-dasharray="716.3" stroke-dashoffset="0"/>
+        </svg>
+        <div class="timer-display">
+          <div class="timer-digits" id="timer-digits">00:00</div>
+          <div class="timer-round-label" id="timer-round-label">Round —</div>
+          <div class="timer-status" id="timer-status">Ready</div>
+        </div>
+      </div>
+
+      <!-- Controls -->
+      <div class="timer-controls">
+        <button class="timer-btn go" id="timer-start-btn" onclick="timerStart()">▶ Start</button>
+        <button class="timer-btn pause" id="timer-pause-btn" onclick="timerPause()" style="display:none">⏸ Pause</button>
+        <button class="timer-btn danger" onclick="timerReset()">↺ Reset</button>
+      </div>
+
+      <!-- Round advance -->
+      <div class="timer-advance">
+        <strong id="timer-round-display">Round 1</strong>
+        <span>·</span>
+        <span>Auto-advances when timer ends</span>
+        <button class="btn sm" onclick="timerNextRound()">Skip Round →</button>
+      </div>
+
     </div>
   </div>
 
@@ -662,10 +748,119 @@ function nextRound() { if(S.cur<S.rounds.length-1){ S.cur++; save(); render(); }
 function switchTab(name, el) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   el.classList.add('active');
-  ['rounds','coverage','setup'].forEach(t => {
+  ['rounds','coverage','setup','timer'].forEach(t => {
     document.getElementById(`tab-${t}`).style.display = t===name ? '' : 'none';
   });
   if (name === 'setup') renderSetupInputs();
+  if (name === 'timer') timerRenderRoundLabel();
+}
+
+// ── TIMER ─────────────────────────────────────────────────────────────
+const RING_C = 2 * Math.PI * 114; // circumference
+
+let T = {
+  totalSecs: 0,
+  remaining: 0,
+  running: false,
+  interval: null,
+  timerRound: 0
+};
+
+function timerSetDuration() {
+  const mins = parseInt(document.getElementById('t-mins').value) || 0;
+  const secs = parseInt(document.getElementById('t-secs').value) || 0;
+  T.totalSecs = mins * 60 + secs;
+  T.remaining = T.totalSecs;
+  timerRenderFace();
+}
+
+function timerStart() {
+  if (T.totalSecs === 0) return;
+  if (T.remaining === 0) { T.remaining = T.totalSecs; }
+  T.running = true;
+  document.getElementById('timer-start-btn').style.display = 'none';
+  document.getElementById('timer-pause-btn').style.display = '';
+  document.getElementById('timer-status').textContent = 'Running';
+  T.interval = setInterval(() => {
+    T.remaining--;
+    timerRenderFace();
+    if (T.remaining <= 0) {
+      timerEnd();
+    }
+  }, 1000);
+}
+
+function timerPause() {
+  clearInterval(T.interval);
+  T.running = false;
+  document.getElementById('timer-start-btn').style.display = '';
+  document.getElementById('timer-start-btn').textContent = '▶ Resume';
+  document.getElementById('timer-pause-btn').style.display = 'none';
+  document.getElementById('timer-status').textContent = 'Paused';
+}
+
+function timerReset() {
+  clearInterval(T.interval);
+  T.running = false;
+  T.remaining = T.totalSecs;
+  document.getElementById('timer-start-btn').style.display = '';
+  document.getElementById('timer-start-btn').textContent = '▶ Start';
+  document.getElementById('timer-pause-btn').style.display = 'none';
+  document.getElementById('timer-status').textContent = 'Ready';
+  timerRenderFace();
+}
+
+function timerEnd() {
+  clearInterval(T.interval);
+  T.running = false;
+  document.getElementById('timer-status').textContent = "Time's up!";
+  document.getElementById('timer-start-btn').style.display = '';
+  document.getElementById('timer-start-btn').textContent = '▶ Next Round';
+  document.getElementById('timer-pause-btn').style.display = 'none';
+  // Flash warning colour
+  document.getElementById('timer-digits').classList.add('warning');
+  // Vibrate if supported
+  if (navigator.vibrate) navigator.vibrate([300, 100, 300]);
+  // Auto-advance round after 3s
+  setTimeout(() => timerNextRound(), 3000);
+}
+
+function timerNextRound() {
+  T.timerRound = Math.min(T.timerRound + 1, S.rounds.length - 1);
+  // Sync main view too
+  S.cur = T.timerRound; save();
+  T.remaining = T.totalSecs;
+  document.getElementById('timer-digits').classList.remove('warning');
+  document.getElementById('timer-start-btn').textContent = '▶ Start';
+  document.getElementById('timer-status').textContent = 'Ready';
+  timerRenderFace();
+  timerRenderRoundLabel();
+}
+
+function timerRenderFace() {
+  const m = Math.floor(T.remaining / 60);
+  const s = T.remaining % 60;
+  document.getElementById('timer-digits').textContent =
+    `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+
+  // Ring
+  const pct = T.totalSecs > 0 ? T.remaining / T.totalSecs : 1;
+  const offset = RING_C * (1 - pct);
+  const ring = document.getElementById('timer-ring');
+  ring.style.strokeDashoffset = offset;
+
+  // Colour: normal → warning (<20%) → danger (<10%)
+  const col = pct < 0.1 ? 'var(--accent)' : pct < 0.2 ? '#b58a1a' : 'var(--ink)';
+  ring.style.stroke = col;
+  const digits = document.getElementById('timer-digits');
+  if (pct < 0.1) digits.classList.add('warning');
+  else digits.classList.remove('warning');
+}
+
+function timerRenderRoundLabel() {
+  const roundNum = T.timerRound + 1;
+  document.getElementById('timer-round-label').textContent = `Round ${roundNum} of ${S.rounds.length}`;
+  document.getElementById('timer-round-display').textContent = `Round ${roundNum}`;
 }
 
 // ── PERSIST ──────────────────────────────────────────────────────────
@@ -706,6 +901,8 @@ function exportCSV() {
 load();
 if (!S.rounds.length) { for(let i=0;i<11;i++) addRoundSilent(); save(); }
 render();
+timerRenderFace();
+timerRenderRoundLabel();
 </script>
 </body>
 </html>
