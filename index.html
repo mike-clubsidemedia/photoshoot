@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shoot Rotation</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=IBM+Plex+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #f5f0e8;
+  --surface: #ece6d8;
+  --card: #fff9f0;
+  --border: #d4c9b0;
+  --dark: #1a1410;
+  --ink: #2e2419;
+  --muted: #8a7a62;
+  --accent: #b5401a;
+  --accent2: #1a6ab5;
+  --accent3: #1a8a4a;
+  --waiting: #8a6a1a;
+  --shadow: 0 2px 12px rgba(26,20,10,0.12);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: 'IBM Plex Mono', monospace;
+  min-height: 100vh;
+}
+body::before {
+  content: '';
+  position: fixed; inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");
+  pointer-events: none; z-index: 0;
+}
+.app { position: relative; z-index: 1; }
+
+header {
+  background: var(--dark);
+  color: var(--bg);
+  padding: 26px 28px 22px;
+  display: flex; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; gap: 14px;
+}
+header h1 {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: clamp(1.8rem,5vw,3rem);
+  font-weight: 300; letter-spacing: 0.04em; line-height: 1;
+}
+header h1 em { font-style: italic; color: #d4a96a; }
+.header-meta { font-size: 0.62rem; letter-spacing: 0.18em; text-transform: uppercase; color: #8a7a62; text-align: right; }
+
+.tabs { display: flex; border-bottom: 2px solid var(--border); background: var(--surface); padding: 0 20px; }
+.tab {
+  padding: 13px 18px; font-size: 0.62rem; letter-spacing: 0.18em; text-transform: uppercase;
+  cursor: pointer; border: none; background: none; color: var(--muted);
+  font-family: 'IBM Plex Mono', monospace; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.2s;
+}
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.tab:hover:not(.active) { color: var(--ink); }
+
+.main { padding: 24px 20px; max-width: 1080px; margin: 0 auto; }
+
+.section-title {
+  font-size: 0.58rem; letter-spacing: 0.22em; text-transform: uppercase; color: var(--muted);
+  margin-bottom: 14px; display: flex; align-items: center; gap: 10px;
+}
+.section-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+/* ── SETUP ── */
+.setup-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 22px; }
+@media(max-width:600px){ .setup-grid { grid-template-columns: 1fr; } }
+.names-panel { background: var(--card); border: 1px solid var(--border); border-radius: 3px; padding: 18px; box-shadow: var(--shadow); }
+.panel-label { font-size: 0.58rem; letter-spacing: 0.22em; text-transform: uppercase; color: var(--muted); margin-bottom: 12px; padding-bottom: 9px; border-bottom: 1px solid var(--border); }
+
+/* Photographer rows — unchanged single input */
+.name-row { display: flex; align-items: center; gap: 7px; margin-bottom: 6px; }
+.name-idx { font-size: 0.55rem; color: var(--muted); width: 18px; flex-shrink: 0; text-align: right; }
+.name-input {
+  flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 2px;
+  color: var(--ink); font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; padding: 6px 9px; outline: none; transition: border-color 0.2s;
+}
+.name-input:focus { border-color: var(--accent2); }
+.color-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+
+/* Model rows — avatar + two stacked inputs */
+.model-row {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 10px; padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.model-row:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+
+.model-avatar-wrap { position: relative; flex-shrink: 0; }
+.model-avatar {
+  width: 40px; height: 40px; border-radius: 50%;
+  object-fit: cover; border: 2px solid var(--border);
+  background: var(--surface); display: block;
+}
+.model-avatar-fallback {
+  width: 40px; height: 40px; border-radius: 50%;
+  background: var(--surface); border: 2px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.75rem; font-weight: 500; color: var(--muted);
+  flex-shrink: 0;
+}
+
+.model-fields { flex: 1; display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.model-name-input {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 2px;
+  color: var(--ink); font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; padding: 5px 8px; outline: none; transition: border-color 0.2s; width: 100%;
+}
+.model-name-input:focus { border-color: var(--accent2); }
+.model-ig-input {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 2px;
+  color: var(--muted); font-family: 'IBM Plex Mono', monospace; font-size: 0.62rem; padding: 5px 8px; outline: none; transition: border-color 0.2s; width: 100%;
+}
+.model-ig-input:focus { border-color: #c6a060; color: var(--ink); }
+.ig-handle-display {
+  font-size: 0.58rem; color: var(--muted); padding: 0 2px;
+}
+.model-avatar-input {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 2px;
+  color: var(--muted); font-family: 'IBM Plex Mono', monospace; font-size: 0.62rem; padding: 5px 8px; outline: none; transition: border-color 0.2s; width: 100%;
+}
+.model-avatar-input:focus { border-color: var(--accent3); color: var(--ink); }
+.avatar-preview-ok { font-size: 0.55rem; color: var(--accent3); padding: 0 2px; }
+.avatar-preview-err { font-size: 0.55rem; color: var(--accent); padding: 0 2px; }
+
+/* ── BUTTONS ── */
+.btn {
+  font-family: 'IBM Plex Mono', monospace; font-size: 0.62rem; letter-spacing: 0.14em; text-transform: uppercase;
+  padding: 9px 18px; border-radius: 2px; cursor: pointer; border: 1px solid var(--border); background: transparent; color: var(--ink); transition: all 0.18s;
+}
+.btn:hover { background: var(--surface); }
+.btn.primary { background: var(--dark); color: var(--bg); border-color: var(--dark); }
+.btn.primary:hover { background: #3a2e24; }
+.btn.accent { background: var(--accent); color: #fff; border-color: var(--accent); }
+.btn.accent:hover { opacity: 0.88; }
+.btn.sm { padding: 7px 13px; font-size: 0.58rem; }
+.btn-row { display: flex; gap: 9px; flex-wrap: wrap; margin-bottom: 22px; }
+
+/* ── STATS ── */
+.stats-row { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 22px; }
+.stat-chip { background: var(--card); border: 1px solid var(--border); border-radius: 3px; padding: 11px 18px; box-shadow: var(--shadow); text-align: center; min-width: 90px; }
+.stat-n { font-family: 'Cormorant Garamond', serif; font-size: 1.9rem; font-weight: 600; color: var(--accent); line-height: 1; }
+.stat-l { font-size: 0.55rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); margin-top: 3px; }
+
+/* ── ROUND NAV ── */
+.round-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 18px; }
+.round-title { font-family: 'Cormorant Garamond', serif; font-size: 1.9rem; font-weight: 400; }
+.round-subtitle { font-size: 0.6rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); margin-top: 2px; }
+.round-nav { display: flex; align-items: center; gap: 12px; }
+.round-dots { display: flex; gap: 5px; flex-wrap: wrap; max-width: 260px; }
+.round-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--border); cursor: pointer; transition: all 0.2s; }
+.round-dot.current { background: var(--accent); transform: scale(1.3); }
+.round-dot.complete { background: var(--accent3); }
+
+/* ── SESSION CARDS ── */
+.sessions-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(190px,1fr)); gap: 12px; margin-bottom: 20px; }
+.session-card {
+  background: var(--card); border: 1px solid var(--border); border-radius: 3px;
+  padding: 16px 14px; box-shadow: var(--shadow); transition: all 0.2s; cursor: pointer; position: relative; overflow: hidden;
+}
+.session-card:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(26,20,10,0.15); }
+.session-card.done { background: #f0f8f0; border-color: #b0d4b0; }
+.session-card.done::after { content: '✓'; position: absolute; top: 10px; right: 12px; font-size: 1rem; color: var(--accent3); }
+.session-stripe { position: absolute; left: 0; top: 0; bottom: 0; width: 3px; border-radius: 3px 0 0 3px; }
+.s-sublabel { font-size: 0.55rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+.s-main { font-family: 'Cormorant Garamond', serif; font-size: 1.1rem; font-weight: 600; margin-bottom: 10px; line-height: 1.2; }
+.s-div { height: 1px; background: var(--border); margin-bottom: 10px; }
+.s-time { font-size: 0.55rem; color: var(--accent3); margin-top: 8px; }
+
+/* Model identity block inside session card */
+.s-model-identity { display: flex; align-items: center; gap: 9px; }
+.s-avatar {
+  width: 36px; height: 36px; border-radius: 50%;
+  object-fit: cover; border: 1px solid var(--border); flex-shrink: 0;
+}
+.s-avatar-fallback {
+  width: 36px; height: 36px; border-radius: 50%;
+  background: var(--surface); border: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.7rem; font-weight: 500; color: var(--muted); flex-shrink: 0;
+}
+.s-model-text { min-width: 0; }
+.s-model-name { font-size: 0.8rem; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.s-model-handle { font-size: 0.58rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ── WAITING ── */
+.waiting-section { background: var(--card); border: 1px solid var(--border); border-radius: 3px; padding: 16px 18px; margin-bottom: 18px; box-shadow: var(--shadow); }
+.waiting-label { font-size: 0.58rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--waiting); margin-bottom: 12px; }
+.waiting-chips { display: flex; flex-wrap: wrap; gap: 9px; }
+
+/* Waiting chip with avatar */
+.waiting-chip {
+  display: flex; align-items: center; gap: 7px;
+  background: #fdf5e0; border: 1px solid #d4b060; border-radius: 20px;
+  padding: 4px 12px 4px 4px; cursor: default;
+}
+.waiting-chip.priority { border-color: var(--accent); background: #fdf0e8; }
+.w-avatar {
+  width: 24px; height: 24px; border-radius: 50%;
+  object-fit: cover; border: 1px solid rgba(0,0,0,0.1); flex-shrink: 0;
+}
+.w-avatar-fallback {
+  width: 24px; height: 24px; border-radius: 50%;
+  background: var(--border); border: 1px solid rgba(0,0,0,0.08);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.55rem; font-weight: 500; color: var(--muted); flex-shrink: 0;
+}
+.w-name { font-size: 0.65rem; color: var(--waiting); }
+.waiting-chip.priority .w-name { color: var(--accent); }
+.w-count { font-size: 0.55rem; color: var(--muted); opacity: 0.7; }
+
+/* ── PROGRESS BARS ── */
+.prog-bars { display: grid; grid-template-columns: repeat(auto-fill,minmax(160px,1fr)); gap: 11px; margin-bottom: 22px; }
+.prog-card { background: var(--card); border: 1px solid var(--border); border-radius: 3px; padding: 13px; box-shadow: var(--shadow); }
+.prog-name { font-size: 0.65rem; margin-bottom: 7px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.prog-track { height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; margin-bottom: 5px; }
+.prog-fill { height: 100%; border-radius: 2px; transition: width 0.4s; }
+.prog-count { font-size: 0.55rem; color: var(--muted); }
+
+/* ── COVERAGE ── */
+.coverage-wrap { overflow-x: auto; }
+table.cov { width: 100%; border-collapse: collapse; font-size: 0.65rem; }
+table.cov th { background: var(--surface); border: 1px solid var(--border); padding: 8px 10px; text-align: center; font-size: 0.55rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
+table.cov th.mthead { text-align: left; color: var(--ink); }
+table.cov td { border: 1px solid var(--border); padding: 7px 10px; text-align: center; background: var(--card); }
+table.cov td.mtd { text-align: left; background: var(--surface); white-space: nowrap; }
+.mtd-inner { display: flex; align-items: center; gap: 7px; }
+.mtd-avatar { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; border: 1px solid var(--border); flex-shrink: 0; }
+.mtd-avatar-fb { width: 22px; height: 22px; border-radius: 50%; background: var(--border); display: flex; align-items: center; justify-content: center; font-size: 0.5rem; color: var(--muted); flex-shrink: 0; }
+.mtd-name { font-size: 0.65rem; }
+.cc { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%; font-size: 0.58rem; font-weight: 500; }
+.cc.done { background: var(--accent3); color: #fff; }
+.cc.none { background: var(--border); color: var(--muted); }
+
+/* ── MODAL ── */
+.modal-bg { display: none; position: fixed; inset: 0; background: rgba(26,20,10,0.65); z-index: 200; align-items: center; justify-content: center; }
+.modal-bg.open { display: flex; }
+.modal-box { background: var(--card); border: 1px solid var(--border); border-radius: 4px; padding: 30px; max-width: 340px; width: 90%; text-align: center; box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
+.modal-box h2 { font-family: 'Cormorant Garamond', serif; font-size: 1.5rem; margin-bottom: 9px; }
+.modal-box p { font-size: 0.7rem; color: var(--muted); margin-bottom: 22px; line-height: 1.6; }
+.modal-btns { display: flex; gap: 9px; justify-content: center; }
+
+.info-box { font-size: 0.68rem; color: var(--muted); line-height: 1.8; max-width: 500px; background: var(--card); border: 1px solid var(--border); border-left: 3px solid var(--accent2); border-radius: 3px; padding: 14px 18px; }
+.info-box strong { color: var(--ink); }
+</style>
+</head>
+<body>
+<div class="app">
+
+<header>
+  <div>
+    <h1>Shoot <em>Rotation</em></h1>
+    <div style="font-size:0.6rem;letter-spacing:0.16em;text-transform:uppercase;color:#8a7a62;margin-top:5px">1-on-1 · 5 Photographers · 11 Models</div>
+  </div>
+  <div class="header-meta" id="header-meta">—</div>
+</header>
+
+<div class="tabs">
+  <button class="tab active" onclick="switchTab('rounds',this)">Rounds</button>
+  <button class="tab" onclick="switchTab('coverage',this)">Coverage Map</button>
+  <button class="tab" onclick="switchTab('setup',this)">Setup</button>
+</div>
+
+<div class="main">
+
+  <!-- SETUP -->
+  <div id="tab-setup" style="display:none">
+    <div class="section-title">Photographers</div>
+    <div class="names-panel" style="margin-bottom:18px">
+      <div id="photo-inputs"></div>
+    </div>
+
+    <div class="section-title">Models</div>
+    <div class="names-panel" style="margin-bottom:18px">
+      <div id="model-inputs"></div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn primary" onclick="rebuildSchedule()">↻ Rebuild Full Schedule</button>
+      <button class="btn" onclick="showModal()">✕ Reset All Progress</button>
+    </div>
+    <div class="info-box">
+      <strong>Model fields:</strong> Enter a display name, their Instagram URL (to extract the handle), and a direct image URL for their avatar. To get an avatar URL — open their Instagram in a browser, right-click their profile photo → "Copy image address", then paste it here.
+    </div>
+  </div>
+
+  <!-- ROUNDS -->
+  <div id="tab-rounds">
+    <div class="stats-row" id="stats-row"></div>
+
+    <div class="round-header">
+      <div>
+        <div class="round-title" id="round-title">—</div>
+        <div class="round-subtitle" id="round-subtitle"></div>
+      </div>
+      <div class="round-nav">
+        <button class="btn sm" onclick="prevRound()">← Prev</button>
+        <div class="round-dots" id="round-dots"></div>
+        <button class="btn sm" onclick="nextRound()">Next →</button>
+      </div>
+    </div>
+
+    <div class="section-title">Active Sessions — tap to mark complete</div>
+    <div class="sessions-grid" id="sessions-grid"></div>
+
+    <div class="waiting-section">
+      <div class="waiting-label">⏳ Waiting This Round &nbsp;·&nbsp; <span style="color:var(--muted);font-weight:300;font-size:0.9em">highlighted = most in need of sessions</span></div>
+      <div class="waiting-chips" id="waiting-chips"></div>
+    </div>
+
+    <div class="section-title">Photographer Progress</div>
+    <div class="prog-bars" id="prog-bars"></div>
+
+    <div class="btn-row">
+      <button class="btn accent" onclick="addRound()">+ Add Another Round</button>
+      <button class="btn" onclick="exportCSV()">⬇ Export CSV</button>
+    </div>
+  </div>
+
+  <!-- COVERAGE -->
+  <div id="tab-coverage" style="display:none">
+    <div class="section-title">Model × Photographer Coverage</div>
+    <div class="coverage-wrap">
+      <table class="cov" id="cov-table"></table>
+    </div>
+    <div style="margin-top:14px;font-size:0.65rem;color:var(--muted)">Number = round in which session occurred. — = not yet paired.</div>
+  </div>
+
+</div>
+</div>
+
+<div class="modal-bg" id="modal">
+  <div class="modal-box">
+    <h2>Reset Everything?</h2>
+    <p>All session completions and rounds will be cleared. Names and Instagram info are kept.</p>
+    <div class="modal-btns">
+      <button class="btn accent" onclick="doReset()">Yes, Reset</button>
+      <button class="btn" onclick="closeModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const NP = 5, NM = 11;
+const COLORS = ['#b5401a','#1a6ab5','#1a8a4a','#8a1ab5','#b58a1a'];
+const KEY = 'shoot_v4';
+
+// Model data shape: { name, igUrl, handle }
+// handle is derived from igUrl on save
+
+let S = {
+  photographers: Array.from({length:NP}, (_,i) => `Photographer ${i+1}`),
+  models: Array.from({length:NM}, (_,i) => ({ name: `Model ${i+1}`, igUrl: '', handle: '', avatarUrl: '' })),
+  rounds: [],
+  done: {},
+  cur: 0
+};
+
+function initials(name) {
+  if (!name) return '?';
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0].slice(0,2).toUpperCase();
+  return (parts[0][0] + parts[parts.length-1][0]).toUpperCase();
+}
+
+// ── INSTAGRAM HANDLE EXTRACTION ──────────────────────────────────────
+function extractHandle(url) {
+  if (!url || !url.trim()) return '';
+  // Strip protocol, www, trailing slashes, query strings
+  let s = url.trim()
+    .replace(/^https?:\/\//i, '')
+    .replace(/^www\./i, '')
+    .replace(/^instagram\.com\//i, '')
+    .replace(/\/.*$/, '')   // remove anything after first slash
+    .replace(/\?.*$/, '')   // remove query string
+    .replace(/@/g, '')      // remove @ if typed
+    .trim();
+  return s;
+}
+
+function avatarUrl(model) {
+  return model.avatarUrl || '';
+}
+
+// Build avatar HTML — tries img first, falls back to colored-initials div
+function avatarImg(model, cls, size) {
+  const url = avatarUrl(model);
+  const ini = initials(model.name);
+  const color = avatarColor(model.name);
+  const szStyle = `width:${size}px;height:${size}px;`;
+  if (url) {
+    return `<img class="${cls}" src="${url}" alt="${ini}" style="${szStyle}"
+      onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+      <div class="${cls}-fallback" style="${szStyle};display:none;background:${color};color:#fff">${ini}</div>`;
+  }
+  return `<div class="${cls}-fallback" style="${szStyle};background:${color};color:#fff">${ini}</div>`;
+}
+
+// Deterministic color from name
+function avatarColor(name) {
+  const palette = ['#b5401a','#1a6ab5','#1a8a4a','#8a1ab5','#b58a1a','#1a8ab5','#b51a6a','#6ab51a'];
+  let h = 0;
+  for (let c of (name||'')) h = (h*31 + c.charCodeAt(0)) & 0xfffffff;
+  return palette[h % palette.length];
+}
+
+// ── SCHEDULING ───────────────────────────────────────────────────────
+function metMatrix() {
+  const m = Array.from({length:NM}, () => Array(NP).fill(0));
+  S.rounds.forEach(round => round.forEach(({p,mo}) => m[mo][p]++));
+  return m;
+}
+
+function genRound() {
+  const mat = metMatrix();
+  const totals = mat.map(row => row.reduce((a,b) => a+b, 0));
+  let cands = [];
+  for (let p=0;p<NP;p++)
+    for (let mo=0;mo<NM;mo++)
+      cands.push({p, mo, score: mat[mo][p]*10000 + totals[mo]});
+  cands.sort((a,b) => a.score - b.score);
+  const used = new Set(), usedP = new Set(), pairs = [];
+  for (const {p,mo} of cands) {
+    if (usedP.has(p) || used.has(mo)) continue;
+    pairs.push({p, mo});
+    usedP.add(p); used.add(mo);
+    if (pairs.length === NP) break;
+  }
+  return pairs;
+}
+
+function addRoundSilent() { S.rounds.push(genRound()); }
+
+function addRound() {
+  addRoundSilent();
+  S.cur = S.rounds.length - 1;
+  save(); render();
+}
+
+function rebuildSchedule() {
+  S.rounds = []; S.done = {}; S.cur = 0;
+  for (let i=0;i<11;i++) addRoundSilent();
+  save(); render();
+}
+
+// ── TOGGLE ───────────────────────────────────────────────────────────
+function toggle(ri, p, mo) {
+  const k = `${ri}-${p}-${mo}`;
+  const s = S.done[k] || {done:false, time:''};
+  s.done = !s.done;
+  s.time = s.done ? new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) : '';
+  S.done[k] = s;
+  save(); renderRound(); renderStats(); renderProg(); renderCoverage();
+}
+
+// ── RENDER ───────────────────────────────────────────────────────────
+function render() {
+  renderSetupInputs();
+  renderStats();
+  renderDots();
+  renderRound();
+  renderProg();
+  renderCoverage();
+  document.getElementById('header-meta').textContent = `Round ${S.cur+1} of ${S.rounds.length}`;
+}
+
+function renderStats() {
+  let done = 0, total = S.rounds.reduce((a,r) => a+r.length, 0);
+  Object.values(S.done).forEach(s => { if(s.done) done++; });
+  const mat = metMatrix();
+  let uniq = 0;
+  for (let mo=0;mo<NM;mo++) for (let p=0;p<NP;p++) if (mat[mo][p]>0) uniq++;
+  document.getElementById('stats-row').innerHTML = `
+    <div class="stat-chip"><div class="stat-n">${S.rounds.length}</div><div class="stat-l">Rounds</div></div>
+    <div class="stat-chip"><div class="stat-n">${done}</div><div class="stat-l">Complete</div></div>
+    <div class="stat-chip"><div class="stat-n">${total-done}</div><div class="stat-l">Pending</div></div>
+    <div class="stat-chip"><div class="stat-n">${uniq}<span style="font-size:1.1rem;color:var(--muted)">/${NM*NP}</span></div><div class="stat-l">Unique Pairs</div></div>`;
+}
+
+function renderDots() {
+  document.getElementById('round-dots').innerHTML = S.rounds.map((r,i) => {
+    const allDone = r.every(({p,mo}) => S.done[`${i}-${p}-${mo}`]?.done);
+    const cls = i===S.cur ? 'current' : allDone ? 'complete' : '';
+    return `<div class="round-dot ${cls}" onclick="goTo(${i})" title="Round ${i+1}"></div>`;
+  }).join('');
+}
+
+function renderRound() {
+  if (!S.rounds.length) {
+    document.getElementById('round-title').textContent = 'No Rounds';
+    document.getElementById('round-subtitle').textContent = 'Go to Setup and rebuild.';
+    document.getElementById('sessions-grid').innerHTML = '';
+    document.getElementById('waiting-chips').innerHTML = '';
+    return;
+  }
+  const ri = S.cur, round = S.rounds[ri];
+  const doneC = round.filter(({p,mo}) => S.done[`${ri}-${p}-${mo}`]?.done).length;
+  document.getElementById('round-title').textContent = `Round ${ri+1}`;
+  document.getElementById('round-subtitle').textContent = `${doneC} of ${NP} sessions complete`;
+  document.getElementById('header-meta').textContent = `Round ${ri+1} of ${S.rounds.length}`;
+
+  // Session cards
+  document.getElementById('sessions-grid').innerHTML = round.map(({p, mo}) => {
+    const k = `${ri}-${p}-${mo}`, s = S.done[k], dn = s?.done;
+    const model = S.models[mo];
+    const handle = model.handle ? `@${model.handle}` : '';
+    return `<div class="session-card ${dn?'done':''}" onclick="toggle(${ri},${p},${mo})">
+      <div class="session-stripe" style="background:${COLORS[p]}"></div>
+      <div class="s-sublabel">Photographer</div>
+      <div class="s-main" style="color:${COLORS[p]}">${S.photographers[p]}</div>
+      <div class="s-div"></div>
+      <div class="s-sublabel">Model</div>
+      <div class="s-model-identity">
+        ${avatarImg(model, 's-avatar', 36)}
+        <div class="s-model-text">
+          <div class="s-model-name">${model.name}</div>
+          ${handle ? `<div class="s-model-handle">${handle}</div>` : ''}
+        </div>
+      </div>
+      ${dn ? `<div class="s-time">✓ ${s.time}</div>` : ''}
+    </div>`;
+  }).join('');
+
+  // Waiting chips
+  const active = new Set(round.map(r => r.mo));
+  const mat = metMatrix();
+  const tots = mat.map(row => row.reduce((a,b) => a+b, 0));
+  const waiting = [];
+  for (let m=0;m<NM;m++) if (!active.has(m)) waiting.push(m);
+  waiting.sort((a,b) => tots[a] - tots[b]);
+  const minTot = tots[waiting[0]] ?? 0;
+
+  document.getElementById('waiting-chips').innerHTML = waiting.map(m => {
+    const model = S.models[m];
+    const isPrio = tots[m] <= minTot;
+    return `<div class="waiting-chip ${isPrio?'priority':''}">
+      ${avatarImg(model, 'w-avatar', 24)}
+      <span class="w-name">${model.name}</span>
+      <span class="w-count">·${tots[m]}</span>
+    </div>`;
+  }).join('');
+
+  renderDots();
+}
+
+function renderProg() {
+  const mat = metMatrix();
+  document.getElementById('prog-bars').innerHTML = S.photographers.map((name,p) => {
+    const cnt = mat.reduce((a,row) => a+(row[p]>0?1:0), 0);
+    const pct = Math.round(cnt/NM*100);
+    return `<div class="prog-card">
+      <div class="prog-name" style="color:${COLORS[p]}">${name}</div>
+      <div class="prog-track"><div class="prog-fill" style="width:${pct}%;background:${COLORS[p]}"></div></div>
+      <div class="prog-count">${cnt} of ${NM} models shot</div>
+    </div>`;
+  }).join('');
+}
+
+function renderCoverage() {
+  const rndMap = {};
+  S.rounds.forEach((round,ri) => round.forEach(({p,mo}) => {
+    const k = `${mo}-${p}`;
+    if (!rndMap[k]) rndMap[k] = [];
+    rndMap[k].push(ri+1);
+  }));
+
+  let html = '<thead><tr><th class="mthead">Model</th>';
+  S.photographers.forEach((n,p) => { html += `<th style="color:${COLORS[p]}">${n}</th>`; });
+  html += '</tr></thead><tbody>';
+
+  S.models.forEach((model, mo) => {
+    html += `<tr><td class="mtd"><div class="mtd-inner">
+      ${avatarImg(model, 'mtd-avatar', 22)}
+      <span class="mtd-name">${model.name}</span>
+    </div></td>`;
+    S.photographers.forEach((_,p) => {
+      const r = rndMap[`${mo}-${p}`];
+      html += r
+        ? `<td><span class="cc done" title="Round ${r.join(',')}">${r[0]}</span></td>`
+        : `<td><span class="cc none">—</span></td>`;
+    });
+    html += '</tr>';
+  });
+  html += '</tbody>';
+  document.getElementById('cov-table').innerHTML = html;
+}
+
+// ── SETUP INPUTS ─────────────────────────────────────────────────────
+function renderSetupInputs() {
+  // Photographers
+  const pEl = document.getElementById('photo-inputs');
+  pEl.innerHTML = '';
+  S.photographers.forEach((n,i) => {
+    const d = document.createElement('div'); d.className = 'name-row';
+    d.innerHTML = `<span class="name-idx">${i+1}</span>
+      <span class="color-dot" style="background:${COLORS[i]}"></span>
+      <input class="name-input" type="text" value="${n}" placeholder="Photographer ${i+1}" data-t="p" data-i="${i}">`;
+    pEl.appendChild(d);
+  });
+
+  // Models
+  const mEl = document.getElementById('model-inputs');
+  mEl.innerHTML = '';
+  S.models.forEach((model, i) => {
+    const d = document.createElement('div'); d.className = 'model-row';
+    d.innerHTML = `
+      <div class="model-avatar-wrap">
+        ${avatarImg(model, 'model-avatar', 40)}
+      </div>
+      <div class="model-fields">
+        <input class="model-name-input" type="text" value="${model.name}" placeholder="Display name" data-t="mname" data-i="${i}">
+        <input class="model-ig-input" type="text" value="${model.igUrl}" placeholder="instagram.com/handle" data-t="igurl" data-i="${i}">
+        <input class="model-avatar-input" type="text" value="${model.avatarUrl}" placeholder="Avatar image URL (paste any direct photo link)" data-t="avurl" data-i="${i}">
+        ${model.handle ? `<div class="ig-handle-display">@${model.handle}</div>` : ''}
+        ${model.avatarUrl ? `<div class="avatar-preview-ok">✓ Avatar set</div>` : ''}
+      </div>`;
+    mEl.appendChild(d);
+  });
+
+  // Attach listeners
+  document.querySelectorAll('.name-input').forEach(inp => inp.addEventListener('input', e => {
+    S.photographers[parseInt(e.target.dataset.i)] = e.target.value || `Photographer ${parseInt(e.target.dataset.i)+1}`;
+    save(); renderRound(); renderProg(); renderCoverage();
+  }));
+
+  document.querySelectorAll('.model-name-input').forEach(inp => inp.addEventListener('input', e => {
+    const i = parseInt(e.target.dataset.i);
+    S.models[i].name = e.target.value || `Model ${i+1}`;
+    save(); renderRound(); renderCoverage();
+    // update avatar initials fallback live
+    const wrap = e.target.closest('.model-row').querySelector('.model-avatar-wrap');
+    const fb = wrap.querySelector('.model-avatar-fallback');
+    if (fb) fb.textContent = initials(S.models[i].name);
+  }));
+
+  document.querySelectorAll('.model-ig-input').forEach(inp => inp.addEventListener('change', e => {
+    const i = parseInt(e.target.dataset.i);
+    const url = e.target.value.trim();
+    S.models[i].igUrl = url;
+    S.models[i].handle = extractHandle(url);
+    save();
+    renderSetupInputs();
+    renderRound(); renderCoverage();
+  }));
+
+  document.querySelectorAll('.model-avatar-input').forEach(inp => inp.addEventListener('change', e => {
+    const i = parseInt(e.target.dataset.i);
+    const url = e.target.value.trim();
+    S.models[i].avatarUrl = url;
+    save();
+    renderSetupInputs();
+    renderRound(); renderCoverage();
+  }));
+}
+
+// ── NAV ──────────────────────────────────────────────────────────────
+function goTo(i) { S.cur=i; save(); render(); }
+function prevRound() { if(S.cur>0){ S.cur--; save(); render(); } }
+function nextRound() { if(S.cur<S.rounds.length-1){ S.cur++; save(); render(); } }
+function switchTab(name, el) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  ['rounds','coverage','setup'].forEach(t => {
+    document.getElementById(`tab-${t}`).style.display = t===name ? '' : 'none';
+  });
+  if (name === 'setup') renderSetupInputs();
+}
+
+// ── PERSIST ──────────────────────────────────────────────────────────
+function save() { localStorage.setItem(KEY, JSON.stringify(S)); }
+function load() {
+  try {
+    const d = localStorage.getItem(KEY);
+    if (d) S = JSON.parse(d);
+    // Migrate old model shapes
+    S.models = S.models.map((m,i) => {
+      if (typeof m === 'string') return { name: m, igUrl: '', handle: '', avatarUrl: '' };
+      if (!('avatarUrl' in m)) m.avatarUrl = '';
+      return m;
+    });
+  } catch(e) {}
+}
+
+// ── RESET ─────────────────────────────────────────────────────────────
+function showModal() { document.getElementById('modal').classList.add('open'); }
+function closeModal() { document.getElementById('modal').classList.remove('open'); }
+function doReset() { S.rounds=[]; S.done={}; S.cur=0; closeModal(); rebuildSchedule(); }
+
+// ── EXPORT ───────────────────────────────────────────────────────────
+function exportCSV() {
+  let csv = 'Round,Photographer,Model,Instagram,Status,Time\n';
+  S.rounds.forEach((round,ri) => round.forEach(({p,mo}) => {
+    const s = S.done[`${ri}-${p}-${mo}`];
+    const model = S.models[mo];
+    csv += `${ri+1},"${S.photographers[p]}","${model.name}","${model.handle?'@'+model.handle:''}",${s?.done?'Done':'Pending'},${s?.time||''}\n`;
+  }));
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
+  a.download = 'shoot_rotation.csv';
+  a.click();
+}
+
+// ── INIT ─────────────────────────────────────────────────────────────
+load();
+if (!S.rounds.length) { for(let i=0;i<11;i++) addRoundSilent(); save(); }
+render();
+</script>
+</body>
+</html>
