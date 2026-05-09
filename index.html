@@ -209,7 +209,6 @@ header h1 em { font-style: italic; color: #d4a96a; }
 }
 .w-name { font-size: 0.65rem; color: var(--waiting); }
 .waiting-chip.priority .w-name { color: var(--accent); }
-.w-count { font-size: 0.55rem; color: var(--muted); opacity: 0.7; }
 
 /* ── PROGRESS BARS ── */
 .prog-bars { display: grid; grid-template-columns: repeat(auto-fill,minmax(160px,1fr)); gap: 11px; margin-bottom: 22px; }
@@ -355,7 +354,7 @@ table.cov td.mtd { text-align: left; background: var(--surface); white-space: no
     <div class="sessions-grid" id="sessions-grid"></div>
 
     <div class="waiting-section">
-      <div class="waiting-label">⏳ Waiting This Round &nbsp;·&nbsp; <span style="color:var(--muted);font-weight:300;font-size:0.9em">highlighted = most in need of sessions</span></div>
+      <div class="waiting-label">⏳ Waiting This Round</div>
       <div class="waiting-chips" id="waiting-chips"></div>
     </div>
 
@@ -651,7 +650,6 @@ function renderRound() {
     return `<div class="waiting-chip ${isPrio?'priority':''}">
       ${avatarImg(model, 'w-avatar', 24)}
       <span class="w-name">${model.name}</span>
-      <span class="w-count">·${tots[m]}</span>
     </div>`;
   }).join('');
 
