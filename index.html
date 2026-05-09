@@ -322,7 +322,7 @@ table.cov td.mtd { text-align: left; background: var(--surface); white-space: no
       <button class="btn" onclick="showModal()">✕ Reset All Progress</button>
     </div>
     <div class="info-box">
-      <strong>Model fields:</strong> Enter a display name, their Instagram URL (to extract the handle), and a direct image URL for their avatar. To get an avatar URL — open their Instagram in a browser, right-click their profile photo → "Copy image address", then paste it here.
+      <strong>Model fields:</strong> Enter a display name and Instagram link. For avatars, you can paste a web URL or use a local image by creating an <code>images</code> folder in your project and typing the path (e.g., <code>images/jane.jpg</code>).
     </div>
   </div>
 
@@ -698,7 +698,7 @@ function renderSetupInputs() {
       <div class="model-fields">
         <input class="model-name-input" type="text" value="${model.name}" placeholder="Display name" data-t="mname" data-i="${i}">
         <input class="model-ig-input" type="text" value="${model.igUrl}" placeholder="instagram.com/handle" data-t="igurl" data-i="${i}">
-        <input class="model-avatar-input" type="text" value="${model.avatarUrl}" placeholder="Avatar image URL (paste any direct photo link)" data-t="avurl" data-i="${i}">
+        <input class="model-avatar-input" type="text" value="${model.avatarUrl}" placeholder="Image path (e.g. images/name.jpg)" data-t="avurl" data-i="${i}">
         ${model.handle ? `<div class="ig-handle-display">@${model.handle}</div>` : ''}
         ${model.avatarUrl ? `<div class="avatar-preview-ok">✓ Avatar set</div>` : ''}
       </div>`;
