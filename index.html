@@ -329,6 +329,19 @@ table.cov td.mtd { text-align: left; background: var(--surface); white-space: no
       <button class="btn primary" onclick="rebuildSchedule()">↻ Rebuild Full Schedule</button>
       <button class="btn" onclick="showModal()">✕ Reset All Progress</button>
     </div>
+
+    <div class="section-title">Manual Data Sync</div>
+    <div class="names-panel" style="margin-bottom:18px">
+      <div class="info-box" style="margin-bottom:12px; border-left-color: var(--accent);">
+        <strong>Transfer State:</strong> To move your setup to another browser, click <strong>Copy State</strong>, then paste that text into the box on the other device and click <strong>Import</strong>.
+      </div>
+      <textarea id="sync-data" class="name-input" style="height:80px; font-size:0.55rem; margin-bottom:10px; resize:none;" placeholder="JSON state will appear here..."></textarea>
+      <div class="btn-row" style="margin-bottom:0">
+        <button class="btn sm" onclick="exportState()">📋 Copy State to Clipboard</button>
+        <button class="btn sm primary" onclick="importState()">📥 Import State</button>
+      </div>
+    </div>
+
     <div class="info-box">
       <strong>Model fields:</strong> Enter a display name and Instagram link. For avatars, you can paste a web URL or use a local image by creating an <code>images</code> folder in your project and typing the path (e.g., <code>images/jane.jpg</code>).
     </div>
@@ -784,6 +797,34 @@ function renderSetupInputs() {
     renderSetupInputs();
     renderRound(); renderCoverage();
   }));
+}
+
+// ── MANUAL SYNC ──────────────────────────────────────────────────────
+function exportState() {
+  const data = JSON.stringify(S);
+  const area = document.getElementById('sync-data');
+  area.value = data;
+  area.select();
+  navigator.clipboard.writeText(data);
+  alert("State copied to clipboard! You can now paste this on another device.");
+}
+
+function importState() {
+  const area = document.getElementById('sync-data');
+  const raw = area.value.trim();
+  if (!raw) return alert("Please paste the state JSON first.");
+
+  try {
+    const imported = JSON.parse(raw);
+    if (!imported.photographers || !imported.models) throw new Error("Invalid format");
+    
+    S = imported;
+    save();
+    render();
+    alert("State imported successfully!");
+  } catch (e) {
+    alert("Error importing: Make sure you pasted the exact text from the other browser.");
+  }
 }
 
 // ── ADD/REMOVE ───────────────────────────────────────────────────────
