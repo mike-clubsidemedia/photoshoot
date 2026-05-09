@@ -234,6 +234,13 @@ table.cov td.mtd { text-align: left; background: var(--surface); white-space: no
 .cc.done { background: var(--accent3); color: #fff; }
 .cc.none { background: var(--border); color: var(--muted); }
 
+.del-row-btn {
+  background: none; border: none; color: var(--muted);
+  cursor: pointer; font-size: 1rem; padding: 0 5px;
+  line-height: 1; transition: color 0.2s; margin-left: auto;
+}
+.del-row-btn:hover { color: var(--accent); }
+
 /* ── MODAL ── */
 .modal-bg { display: none; position: fixed; inset: 0; background: rgba(26,20,10,0.65); z-index: 200; align-items: center; justify-content: center; }
 .modal-bg.open { display: flex; }
@@ -291,7 +298,7 @@ table.cov td.mtd { text-align: left; background: var(--surface); white-space: no
 <header>
   <div>
     <h1>Shoot <em>Rotation</em></h1>
-    <div style="font-size:0.6rem;letter-spacing:0.16em;text-transform:uppercase;color:#8a7a62;margin-top:5px">1-on-1 · 5 Photographers · 11 Models</div>
+    <div id="header-counts" style="font-size:0.6rem;letter-spacing:0.16em;text-transform:uppercase;color:#8a7a62;margin-top:5px">—</div>
   </div>
   <div class="header-meta" id="header-meta">—</div>
 </header>
@@ -310,11 +317,13 @@ table.cov td.mtd { text-align: left; background: var(--surface); white-space: no
     <div class="section-title">Photographers</div>
     <div class="names-panel" style="margin-bottom:18px">
       <div id="photo-inputs"></div>
+      <button class="btn sm" style="margin-top:10px" onclick="addPhotographer()">+ Add Photographer</button>
     </div>
 
     <div class="section-title">Models</div>
     <div class="names-panel" style="margin-bottom:18px">
       <div id="model-inputs"></div>
+      <button class="btn sm" style="margin-top:10px" onclick="addModel()">+ Add Model</button>
     </div>
 
     <div class="btn-row">
@@ -429,16 +438,15 @@ table.cov td.mtd { text-align: left; background: var(--surface); white-space: no
 </div>
 
 <script>
-const NP = 5, NM = 11;
-const COLORS = ['#b5401a','#1a6ab5','#1a8a4a','#8a1ab5','#b58a1a'];
+const COLORS = ['#b5401a','#1a6ab5','#1a8a4a','#8a1ab5','#b58a1a','#1a8ab5','#b51a6a','#6ab51a','#d4a96a','#4a1a8a'];
 const KEY = 'shoot_v4';
 
 // Model data shape: { name, igUrl, handle }
 // handle is derived from igUrl on save
 
 let S = {
-  photographers: Array.from({length:NP}, (_,i) => `Photographer ${i+1}`),
-  models: Array.from({length:NM}, (_,i) => ({ name: `Model ${i+1}`, igUrl: '', handle: '', avatarUrl: '' })),
+  photographers: Array.from({length:5}, (_,i) => ({ name: `Photographer ${i+1}`, avatarUrl: '' })),
+  models: Array.from({length:11}, (_,i) => ({ name: `Model ${i+1}`, igUrl: '', handle: '', avatarUrl: '' })),
   rounds: [],
   done: {},
   cur: 0
@@ -494,7 +502,7 @@ function avatarColor(name) {
 
 // ── SCHEDULING ───────────────────────────────────────────────────────
 function metMatrix() {
-  const m = Array.from({length:NM}, () => Array(NP).fill(0));
+  const m = Array.from({length:S.models.length}, () => Array(S.photographers.length).fill(0));
   S.rounds.forEach(round => round.forEach(({p,mo}) => m[mo][p]++));
   return m;
 }
@@ -503,8 +511,8 @@ function genRound() {
   const mat = metMatrix();
   const totals = mat.map(row => row.reduce((a,b) => a+b, 0));
   let cands = [];
-  for (let p=0;p<NP;p++)
-    for (let mo=0;mo<NM;mo++)
+  for (let p=0;p<S.photographers.length;p++)
+    for (let mo=0;mo<S.models.length;mo++)
       cands.push({p, mo, score: mat[mo][p]*10000 + totals[mo]});
   cands.sort((a,b) => a.score - b.score);
   const used = new Set(), usedP = new Set(), pairs = [];
@@ -512,7 +520,7 @@ function genRound() {
     if (usedP.has(p) || used.has(mo)) continue;
     pairs.push({p, mo});
     usedP.add(p); used.add(mo);
-    if (pairs.length === NP) break;
+    if (pairs.length === S.photographers.length) break;
   }
   return pairs;
 }
@@ -527,7 +535,7 @@ function addRound() {
 
 function rebuildSchedule() {
   S.rounds = []; S.done = {}; S.cur = 0;
-  for (let i=0;i<11;i++) addRoundSilent();
+  for (let i=0;i<S.models.length;i++) addRoundSilent();
   save(); render();
 }
 
@@ -550,19 +558,23 @@ function render() {
   renderProg();
   renderCoverage();
   document.getElementById('header-meta').textContent = `Round ${S.cur+1} of ${S.rounds.length}`;
+  document.getElementById('header-counts').textContent = `1-on-1 · ${S.photographers.length} Photographers · ${S.models.length} Models`;
 }
 
 function renderStats() {
+  const NP = S.photographers.length;
+  const NM = S.models.length;
   let done = 0, total = S.rounds.reduce((a,r) => a+r.length, 0);
   Object.values(S.done).forEach(s => { if(s.done) done++; });
   const mat = metMatrix();
   let uniq = 0;
   for (let mo=0;mo<NM;mo++) for (let p=0;p<NP;p++) if (mat[mo][p]>0) uniq++;
+  const denom = NM * NP;
   document.getElementById('stats-row').innerHTML = `
     <div class="stat-chip"><div class="stat-n">${S.rounds.length}</div><div class="stat-l">Rounds</div></div>
     <div class="stat-chip"><div class="stat-n">${done}</div><div class="stat-l">Complete</div></div>
     <div class="stat-chip"><div class="stat-n">${total-done}</div><div class="stat-l">Pending</div></div>
-    <div class="stat-chip"><div class="stat-n">${uniq}<span style="font-size:1.1rem;color:var(--muted)">/${NM*NP}</span></div><div class="stat-l">Unique Pairs</div></div>`;
+    <div class="stat-chip"><div class="stat-n">${uniq}<span style="font-size:1.1rem;color:var(--muted)">/${denom}</span></div><div class="stat-l">Unique Pairs</div></div>`;
 }
 
 function renderDots() {
@@ -582,6 +594,8 @@ function renderRound() {
     return;
   }
   const ri = S.cur, round = S.rounds[ri];
+  const NP = S.photographers.length;
+  const NM = S.models.length;
   const doneC = round.filter(({p,mo}) => S.done[`${ri}-${p}-${mo}`]?.done).length;
   document.getElementById('round-title').textContent = `Round ${ri+1}`;
   document.getElementById('round-subtitle').textContent = `${doneC} of ${NP} sessions complete`;
@@ -593,9 +607,12 @@ function renderRound() {
     const model = S.models[mo];
     const handle = model.handle ? `@${model.handle}` : '';
     return `<div class="session-card ${dn?'done':''}" onclick="toggle(${ri},${p},${mo})">
-      <div class="session-stripe" style="background:${COLORS[p]}"></div>
+      <div class="session-stripe" style="background:${COLORS[p % COLORS.length]}"></div>
       <div class="s-sublabel">Photographer</div>
-      <div class="s-main" style="color:${COLORS[p]}">${S.photographers[p]}</div>
+      <div class="s-model-identity" style="margin-bottom:10px">
+        ${avatarImg(S.photographers[p], 's-avatar', 36)}
+        <div class="s-main" style="color:${COLORS[p % COLORS.length]};margin-bottom:0">${S.photographers[p].name}</div>
+      </div>
       <div class="s-div"></div>
       <div class="s-sublabel">Model</div>
       <div class="s-model-identity">
@@ -633,12 +650,16 @@ function renderRound() {
 
 function renderProg() {
   const mat = metMatrix();
-  document.getElementById('prog-bars').innerHTML = S.photographers.map((name,p) => {
+  const NM = S.models.length;
+  document.getElementById('prog-bars').innerHTML = S.photographers.map((photog,p) => {
     const cnt = mat.reduce((a,row) => a+(row[p]>0?1:0), 0);
     const pct = Math.round(cnt/NM*100);
     return `<div class="prog-card">
-      <div class="prog-name" style="color:${COLORS[p]}">${name}</div>
-      <div class="prog-track"><div class="prog-fill" style="width:${pct}%;background:${COLORS[p]}"></div></div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">
+        ${avatarImg(photog, 'mtd-avatar', 22)}
+        <div class="prog-name" style="color:${COLORS[p % COLORS.length]};margin-bottom:0">${photog.name}</div>
+      </div>
+      <div class="prog-track"><div class="prog-fill" style="width:${pct}%;background:${COLORS[p % COLORS.length]}"></div></div>
       <div class="prog-count">${cnt} of ${NM} models shot</div>
     </div>`;
   }).join('');
@@ -653,7 +674,7 @@ function renderCoverage() {
   }));
 
   let html = '<thead><tr><th class="mthead">Model</th>';
-  S.photographers.forEach((n,p) => { html += `<th style="color:${COLORS[p]}">${n}</th>`; });
+  S.photographers.forEach((n,p) => { html += `<th style="color:${COLORS[p % COLORS.length]}">${n.name}</th>`; });
   html += '</tr></thead><tbody>';
 
   S.models.forEach((model, mo) => {
@@ -679,10 +700,19 @@ function renderSetupInputs() {
   const pEl = document.getElementById('photo-inputs');
   pEl.innerHTML = '';
   S.photographers.forEach((n,i) => {
-    const d = document.createElement('div'); d.className = 'name-row';
-    d.innerHTML = `<span class="name-idx">${i+1}</span>
-      <span class="color-dot" style="background:${COLORS[i]}"></span>
-      <input class="name-input" type="text" value="${n}" placeholder="Photographer ${i+1}" data-t="p" data-i="${i}">`;
+    const d = document.createElement('div'); d.className = 'model-row';
+    d.innerHTML = `
+      <div class="model-avatar-wrap">
+        ${avatarImg(n, 'model-avatar', 40)}
+      </div>
+      <div class="model-fields">
+        <div style="display:flex;align-items:center;gap:6px">
+          <span class="color-dot" style="background:${COLORS[i % COLORS.length]}"></span>
+          <input class="photog-name-input" type="text" value="${n.name}" placeholder="Photographer ${i+1}" data-i="${i}">
+        </div>
+        <input class="photog-avatar-input" type="text" value="${n.avatarUrl || ''}" placeholder="Image path (e.g. images/p1.jpg)" data-i="${i}">
+      </div>
+      <button class="del-row-btn" onclick="removePhotographer(${i})" title="Remove">✕</button>`;
     pEl.appendChild(d);
   });
 
@@ -701,14 +731,21 @@ function renderSetupInputs() {
         <input class="model-avatar-input" type="text" value="${model.avatarUrl}" placeholder="Image path (e.g. images/name.jpg)" data-t="avurl" data-i="${i}">
         ${model.handle ? `<div class="ig-handle-display">@${model.handle}</div>` : ''}
         ${model.avatarUrl ? `<div class="avatar-preview-ok">✓ Avatar set</div>` : ''}
-      </div>`;
+      </div>
+      <button class="del-row-btn" onclick="removeModel(${i})" title="Remove">✕</button>`;
     mEl.appendChild(d);
   });
 
   // Attach listeners
-  document.querySelectorAll('.name-input').forEach(inp => inp.addEventListener('input', e => {
-    S.photographers[parseInt(e.target.dataset.i)] = e.target.value || `Photographer ${parseInt(e.target.dataset.i)+1}`;
+  document.querySelectorAll('.photog-name-input').forEach(inp => inp.addEventListener('input', e => {
+    const i = parseInt(e.target.dataset.i);
+    S.photographers[i].name = e.target.value || `Photographer ${i+1}`;
     save(); renderRound(); renderProg(); renderCoverage();
+  }));
+
+  document.querySelectorAll('.photog-avatar-input').forEach(inp => inp.addEventListener('change', e => {
+    S.photographers[parseInt(e.target.dataset.i)].avatarUrl = e.target.value.trim();
+    save(); renderSetupInputs(); renderRound(); renderProg(); renderCoverage();
   }));
 
   document.querySelectorAll('.model-name-input').forEach(inp => inp.addEventListener('input', e => {
@@ -740,6 +777,27 @@ function renderSetupInputs() {
     renderRound(); renderCoverage();
   }));
 }
+
+// ── ADD/REMOVE ───────────────────────────────────────────────────────
+function addPhotographer() {
+  S.photographers.push({ name: `Photographer ${S.photographers.length + 1}`, avatarUrl: '' });
+  save(); renderSetupInputs(); render();
+}
+function removePhotographer(i) {
+  if (S.photographers.length <= 1) return;
+  S.photographers.splice(i, 1);
+  save(); renderSetupInputs(); render();
+}
+function addModel() {
+  S.models.push({ name: `Model ${S.models.length + 1}`, igUrl: '', handle: '', avatarUrl: '' });
+  save(); renderSetupInputs(); render();
+}
+function removeModel(i) {
+  if (S.models.length <= 1) return;
+  S.models.splice(i, 1);
+  save(); renderSetupInputs(); render();
+}
+
 
 // ── NAV ──────────────────────────────────────────────────────────────
 function goTo(i) { S.cur=i; save(); render(); }
@@ -875,6 +933,11 @@ function load() {
       if (!('avatarUrl' in m)) m.avatarUrl = '';
       return m;
     });
+    // Migrate old photographer shapes
+    S.photographers = S.photographers.map((p,i) => {
+      if (typeof p === 'string') return { name: p, avatarUrl: '' };
+      return p;
+    });
   } catch(e) {}
 }
 
@@ -889,7 +952,7 @@ function exportCSV() {
   S.rounds.forEach((round,ri) => round.forEach(({p,mo}) => {
     const s = S.done[`${ri}-${p}-${mo}`];
     const model = S.models[mo];
-    csv += `${ri+1},"${S.photographers[p]}","${model.name}","${model.handle?'@'+model.handle:''}",${s?.done?'Done':'Pending'},${s?.time||''}\n`;
+    csv += `${ri+1},"${S.photographers[p].name}","${model.name}","${model.handle?'@'+model.handle:''}",${s?.done?'Done':'Pending'},${s?.time||''}\n`;
   }));
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
