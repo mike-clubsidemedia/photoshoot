@@ -507,6 +507,16 @@ function metMatrix() {
   return m;
 }
 
+function getDoneMatrix() {
+  const m = Array.from({length:S.models.length}, () => Array(S.photographers.length).fill(0));
+  S.rounds.forEach((round, ri) => {
+    round.forEach(({p,mo}) => {
+      if (S.done[`${ri}-${p}-${mo}`]?.done) m[mo][p]++;
+    });
+  });
+  return m;
+}
+
 function genRound() {
   const mat = metMatrix();
   const totals = mat.map(row => row.reduce((a,b) => a+b, 0));
@@ -628,7 +638,7 @@ function renderRound() {
 
   // Waiting chips
   const active = new Set(round.map(r => r.mo));
-  const mat = metMatrix();
+  const mat = getDoneMatrix();
   const tots = mat.map(row => row.reduce((a,b) => a+b, 0));
   const waiting = [];
   for (let m=0;m<NM;m++) if (!active.has(m)) waiting.push(m);
@@ -649,7 +659,7 @@ function renderRound() {
 }
 
 function renderProg() {
-  const mat = metMatrix();
+  const mat = getDoneMatrix();
   const NM = S.models.length;
   document.getElementById('prog-bars').innerHTML = S.photographers.map((photog,p) => {
     const cnt = mat.reduce((a,row) => a+(row[p]>0?1:0), 0);
