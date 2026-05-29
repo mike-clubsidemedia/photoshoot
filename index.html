@@ -289,6 +289,15 @@ table.cov td.mtd { text-align: left; background: var(--surface); white-space: no
   padding: 14px 22px; box-shadow: var(--shadow); font-size: 0.68rem; color: var(--muted);
 }
 .timer-advance strong { color: var(--ink); }
+
+/* ── IG CONTENT ── */
+.ig-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; margin-bottom: 24px; }
+.ig-card { background: var(--card); border: 1px solid var(--border); border-radius: 3px; padding: 12px; display: flex; align-items: center; gap: 12px; box-shadow: var(--shadow); }
+.ig-card-info { min-width: 0; }
+.ig-card-name { font-weight: 600; font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ig-card-handle { font-size: 0.7rem; color: var(--accent); }
+.ig-avatar-lg { width: 60px; height: 60px; border-radius: 50%; object-fit: cover; border: 2px solid var(--border); flex-shrink: 0; }
+.ig-avatar-lg-fallback { width: 60px; height: 60px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; font-weight: 500; border: 2px solid var(--border); flex-shrink: 0; }
 </style>
 </head>
 <body>
@@ -305,6 +314,7 @@ table.cov td.mtd { text-align: left; background: var(--surface); white-space: no
 <div class="tabs">
   <button class="tab active" onclick="switchTab('rounds',this)">Rounds</button>
   <button class="tab" onclick="switchTab('coverage',this)">Coverage Map</button>
+  <button class="tab" onclick="switchTab('ig',this)">IG Content</button>
   <button class="tab" onclick="switchTab('timer',this)">Timer</button>
   <button class="tab" onclick="switchTab('setup',this)">Setup</button>
 </div>
@@ -435,6 +445,18 @@ table.cov td.mtd { text-align: left; background: var(--surface); white-space: no
     <div style="margin-top:14px;font-size:0.65rem;color:var(--muted)">Number = round in which session occurred. — = not yet paired.</div>
   </div>
 
+  <!-- IG CONTENT -->
+  <div id="tab-ig" style="display:none">
+    <div class="btn-row">
+      <button class="btn primary" onclick="copyAllHandles()">📋 Copy All Handles</button>
+    </div>
+    <div class="section-title">Photographers</div>
+    <div class="ig-list" id="ig-photographers"></div>
+
+    <div class="section-title">Models</div>
+    <div class="ig-list" id="ig-models"></div>
+  </div>
+
 </div>
 </div>
 
@@ -457,7 +479,7 @@ const KEY = 'shoot_v4';
 // handle is derived from igUrl on save
 
 let S = {
-  photographers: Array.from({length:5}, (_,i) => ({ name: `Photographer ${i+1}`, avatarUrl: '' })),
+  photographers: Array.from({length:5}, (_,i) => ({ name: `Photographer ${i+1}`, igUrl: '', handle: '', avatarUrl: '' })),
   models: Array.from({length:11}, (_,i) => ({ name: `Model ${i+1}`, igUrl: '', handle: '', avatarUrl: '' })),
   rounds: [],
   done: {},
@@ -579,6 +601,7 @@ function render() {
   renderRound();
   renderProg();
   renderCoverage();
+  renderIGContent();
   document.getElementById('header-meta').textContent = `Round ${S.cur+1} of ${S.rounds.length}`;
   document.getElementById('header-counts').textContent = `1-on-1 · ${S.photographers.length} Photographers · ${S.models.length} Models`;
 }
@@ -715,6 +738,31 @@ function renderCoverage() {
   document.getElementById('cov-table').innerHTML = html;
 }
 
+function renderIGContent() {
+  const renderList = (items, elementId) => {
+    document.getElementById(elementId).innerHTML = items.map(item => `
+      <div class="ig-card">
+        ${avatarImg(item, 'ig-avatar-lg', 60)}
+        <div class="ig-card-info">
+          <div class="ig-card-name">${item.name}</div>
+          <div class="ig-card-handle">${item.handle ? '@' + item.handle : '—'}</div>
+        </div>
+      </div>
+    `).join('');
+  };
+
+  renderList(S.photographers, 'ig-photographers');
+  renderList(S.models, 'ig-models');
+}
+
+function copyAllHandles() {
+  const pHandles = S.photographers.filter(p => p.handle).map(p => `@${p.handle}`);
+  const mHandles = S.models.filter(m => m.handle).map(m => `@${m.handle}`);
+  const all = [...pHandles, ...mHandles].join(' ');
+  navigator.clipboard.writeText(all);
+  alert(`Copied ${[...pHandles, ...mHandles].length} handles to clipboard!`);
+}
+
 // ── SETUP INPUTS ─────────────────────────────────────────────────────
 function renderSetupInputs() {
   // Photographers
@@ -731,6 +779,7 @@ function renderSetupInputs() {
           <span class="color-dot" style="background:${COLORS[i % COLORS.length]}"></span>
           <input class="photog-name-input" type="text" value="${n.name}" placeholder="Photographer ${i+1}" data-i="${i}">
         </div>
+        <input class="photog-ig-input" type="text" value="${n.igUrl || ''}" placeholder="instagram.com/handle" data-i="${i}">
         <input class="photog-avatar-input" type="text" value="${n.avatarUrl || ''}" placeholder="Image path (e.g. images/p1.jpg)" data-i="${i}">
       </div>
       <button class="del-row-btn" onclick="removePhotographer(${i})" title="Remove">✕</button>`;
@@ -761,12 +810,20 @@ function renderSetupInputs() {
   document.querySelectorAll('.photog-name-input').forEach(inp => inp.addEventListener('input', e => {
     const i = parseInt(e.target.dataset.i);
     S.photographers[i].name = e.target.value || `Photographer ${i+1}`;
-    save(); renderRound(); renderProg(); renderCoverage();
+    save(); renderRound(); renderProg(); renderCoverage(); renderIGContent();
+  }));
+
+  document.querySelectorAll('.photog-ig-input').forEach(inp => inp.addEventListener('change', e => {
+    const i = parseInt(e.target.dataset.i);
+    const url = e.target.value.trim();
+    S.photographers[i].igUrl = url;
+    S.photographers[i].handle = extractHandle(url);
+    save(); renderSetupInputs(); renderIGContent();
   }));
 
   document.querySelectorAll('.photog-avatar-input').forEach(inp => inp.addEventListener('change', e => {
     S.photographers[parseInt(e.target.dataset.i)].avatarUrl = e.target.value.trim();
-    save(); renderSetupInputs(); renderRound(); renderProg(); renderCoverage();
+    save(); renderSetupInputs(); renderRound(); renderProg(); renderCoverage(); renderIGContent();
   }));
 
   document.querySelectorAll('.model-name-input').forEach(inp => inp.addEventListener('input', e => {
@@ -786,7 +843,7 @@ function renderSetupInputs() {
     S.models[i].handle = extractHandle(url);
     save();
     renderSetupInputs();
-    renderRound(); renderCoverage();
+    renderRound(); renderCoverage(); renderIGContent();
   }));
 
   document.querySelectorAll('.model-avatar-input').forEach(inp => inp.addEventListener('change', e => {
@@ -795,7 +852,7 @@ function renderSetupInputs() {
     S.models[i].avatarUrl = url;
     save();
     renderSetupInputs();
-    renderRound(); renderCoverage();
+    renderRound(); renderCoverage(); renderIGContent();
   }));
 }
 
@@ -855,11 +912,12 @@ function nextRound() { if(S.cur<S.rounds.length-1){ S.cur++; save(); render(); }
 function switchTab(name, el) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   el.classList.add('active');
-  ['rounds','coverage','setup','timer'].forEach(t => {
+  ['rounds','coverage','setup','timer','ig'].forEach(t => {
     document.getElementById(`tab-${t}`).style.display = t===name ? '' : 'none';
   });
   if (name === 'setup') renderSetupInputs();
   if (name === 'timer') timerRenderRoundLabel();
+  if (name === 'ig') renderIGContent();
 }
 
 // ── TIMER ─────────────────────────────────────────────────────────────
@@ -985,6 +1043,8 @@ function load() {
     // Migrate old photographer shapes
     S.photographers = S.photographers.map((p,i) => {
       if (typeof p === 'string') return { name: p, avatarUrl: '' };
+      if (!('igUrl' in p)) p.igUrl = '';
+      if (!('handle' in p)) p.handle = '';
       return p;
     });
   } catch(e) {}
