@@ -512,6 +512,7 @@ const COLORS = ['#b5401a','#1a6ab5','#1a8a4a','#8a1ab5','#b58a1a','#1a8ab5','#b5
 const KEY = 'shoot_v4';
 const SB_URL = 'https://imvcmyfjnelyeftxmypg.supabase.co'; // Paste your Supabase Project URL here
 const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImltdmNteWZqbmVseWVmdHhteXBnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA4NjMwMDUsImV4cCI6MjA5NjQzOTAwNX0.hMrllp2m1Qw2HHv5Cr8yxtHmmWOC6nI2TTYbLlYk4Wc'; // Paste your Supabase Anon Key here
+const EVENT_ID = '00000000-0000-0000-0000-000000000000'; // Valid UUID format
 let sb = null;
 
 // Model data shape: { name, igUrl, handle }
@@ -979,9 +980,10 @@ async function initSupabaseSync(url, key, silent = false, btn = null) {
 function setupRealtime() {
   if (!sb) return;
   sb.channel('schema-db-changes')
-    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'events' }, payload => {
-        if (payload.new.id === 'default-event') {
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'events' }, payload => {
+        if (payload.new && payload.new.id === EVENT_ID) {
             S = payload.new.state;
+            localStorage.setItem(KEY, JSON.stringify(S));
             render();
         }
     })
@@ -1018,12 +1020,10 @@ async function pushToCloud(btn = null) {
     }
 
     try {
-        const eventId = 'default-event'; // Replace with dynamic ID if supporting multiple events
-        
         await sb
             .from('events')
-            .upsert({ 
-                id: eventId, 
+            .upsert({
+                id: EVENT_ID,
                 state: S,
                 updated_at: new Date() 
             });
@@ -1051,8 +1051,8 @@ async function pullFromCloud() {
     const { data, error } = await sb
         .from('events')
         .select('*')
-        .eq('id', 'default-event')
-        .single();
+        .eq('id', EVENT_ID)
+        .maybeSingle();
 
     if (data && data.state) {
         S = data.state;
@@ -1072,8 +1072,8 @@ async function manualSync(btn) {
         const { data, error } = await sb
             .from('events')
             .select('*')
-            .eq('id', 'default-event')
-            .single();
+            .eq('id', EVENT_ID)
+            .maybeSingle();
 
         if (error) {
             alert("Sync failed: " + error.message);
@@ -1082,6 +1082,8 @@ async function manualSync(btn) {
             localStorage.setItem(KEY, JSON.stringify(S));
             render();
             alert("Sync successful: Latest cloud data pulled.");
+        } else {
+            alert("No cloud data found. Use 'Push Local to Cloud' on the original device first.");
         }
     } finally {
         btn.innerHTML = originalText;
