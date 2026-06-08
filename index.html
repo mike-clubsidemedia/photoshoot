@@ -153,6 +153,7 @@ header h1 em { font-style: italic; color: #d4a96a; }
   padding: 9px 18px; border-radius: 2px; cursor: pointer; border: 1px solid var(--border); background: transparent; color: var(--ink); transition: all 0.18s;
 }
 .btn:hover { background: var(--surface); }
+.btn:disabled { opacity: 0.6; cursor: wait; }
 .btn.primary { background: var(--dark); color: var(--bg); border-color: var(--dark); }
 .btn.primary:hover { background: #3a2e24; }
 .btn.accent { background: var(--accent); color: #fff; border-color: var(--accent); }
@@ -371,8 +372,9 @@ table.cov td.mtd { text-align: left; background: var(--surface); white-space: no
             Status: <span id="sync-indicator">Local Only</span>
         </div>
         <div class="btn-row" style="margin-bottom:0">
-            <button class="btn sm primary" onclick="initSupabaseSync()">Link Supabase Project</button>
-            <button class="btn sm" onclick="pushToCloud()">↑ Push Local to Cloud</button>
+            <button class="btn sm primary" onclick="initSupabaseSync(null, null, false, this)">Link Supabase Project</button>
+            <button class="btn sm" onclick="pushToCloud(this)">↑ Push Local to Cloud</button>
+            <button class="btn sm" onclick="manualSync(this)">↓ Sync Now</button>
         </div>
     </div>
 
@@ -934,12 +936,18 @@ function handleFileUpload(input, type, index) {
 }
 
 // ── SUPABASE SYNC & STORAGE ──────────────────────────────────────────
-async function initSupabaseSync(url, key, silent = false) {
+async function initSupabaseSync(url, key, silent = false, btn = null) {
   url = url || SB_URL || prompt("Enter Supabase Project URL:");
   key = key || SB_KEY || prompt("Enter Supabase Anon Key:");
   
   if (!url || !key) return;
   
+  const originalText = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '⏳ Linking...';
+  }
+
   try {
     const client = window.supabase.createClient(url, key);
     // Perform a lightweight check to see if the credentials work
@@ -960,6 +968,11 @@ async function initSupabaseSync(url, key, silent = false) {
   } catch (err) {
     console.error("Supabase connection failed:", err);
     if (!silent) alert("Failed to connect to Supabase. Please check your URL and Key.");
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = originalText;
+    }
   }
 }
 
@@ -996,17 +1009,30 @@ async function uploadPhoto(file, type, index) {
     pushToCloud();
 }
 
-async function pushToCloud() {
+async function pushToCloud(btn = null) {
     if (!sb) return;
-    const eventId = 'default-event'; // Replace with dynamic ID if supporting multiple events
-    
-    await sb
-        .from('events')
-        .upsert({ 
-            id: eventId, 
-            state: S,
-            updated_at: new Date() 
-        });
+    const originalText = btn ? btn.innerHTML : '';
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '⏳ Pushing...';
+    }
+
+    try {
+        const eventId = 'default-event'; // Replace with dynamic ID if supporting multiple events
+        
+        await sb
+            .from('events')
+            .upsert({ 
+                id: eventId, 
+                state: S,
+                updated_at: new Date() 
+            });
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        }
+    }
 }
 
 let syncTimeout;
@@ -1032,6 +1058,34 @@ async function pullFromCloud() {
         S = data.state;
         localStorage.setItem(KEY, JSON.stringify(S));
         render();
+    }
+}
+
+async function manualSync(btn) {
+    if (!sb) return alert("Please link your Supabase project first.");
+    
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '⏳ Syncing...';
+    btn.disabled = true;
+
+    try {
+        const { data, error } = await sb
+            .from('events')
+            .select('*')
+            .eq('id', 'default-event')
+            .single();
+
+        if (error) {
+            alert("Sync failed: " + error.message);
+        } else if (data && data.state) {
+            S = data.state;
+            localStorage.setItem(KEY, JSON.stringify(S));
+            render();
+            alert("Sync successful: Latest cloud data pulled.");
+        }
+    } finally {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
     }
 }
 
