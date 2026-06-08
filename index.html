@@ -339,7 +339,6 @@ table.cov td.mtd { text-align: left; background: var(--surface); white-space: no
 <div class="tabs">
   <button class="tab active" onclick="switchTab('rounds',this)">Rounds</button>
   <button class="tab" onclick="switchTab('checkin',this)">Check-in</button>
-  <button class="tab" onclick="switchTab('coverage',this)">Coverage Map</button>
   <button class="tab" onclick="switchTab('ig',this)">IG Content</button>
   <button class="tab" onclick="switchTab('timer',this)">Timer</button>
   <button class="tab" onclick="switchTab('setup',this)">Setup</button>
@@ -468,15 +467,6 @@ table.cov td.mtd { text-align: left; background: var(--surface); white-space: no
       </div>
 
     </div>
-  </div>
-
-  <!-- COVERAGE -->
-  <div id="tab-coverage" style="display:none">
-    <div class="section-title">Model × Photographer Coverage</div>
-    <div class="coverage-wrap">
-      <table class="cov" id="cov-table"></table>
-    </div>
-    <div style="margin-top:14px;font-size:0.65rem;color:var(--muted)">Number = round in which session occurred. — = not yet paired.</div>
   </div>
 
   <!-- IG CONTENT -->
@@ -636,7 +626,7 @@ function toggle(ri, p, mo) {
   s.done = !s.done;
   s.time = s.done ? new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) : '';
   S.done[k] = s;
-  save(); renderRound(); renderStats(); renderProg(); renderCoverage();
+  save(); renderRound(); renderStats(); renderProg();
 }
 
 // ── RENDER ───────────────────────────────────────────────────────────
@@ -647,7 +637,6 @@ function render() {
   renderDots();
   renderRound();
   renderProg();
-  renderCoverage();
   renderIGContent();
   document.getElementById('header-meta').textContent = `Round ${S.cur+1} of ${S.rounds.length}`;
   document.getElementById('header-counts').textContent = `1-on-1 · ${S.models.length} Models · ${S.photographers.length} Photographers`;
@@ -757,35 +746,6 @@ function renderProg() {
   }).join('');
 }
 
-function renderCoverage() {
-  const rndMap = {};
-  S.rounds.forEach((round,ri) => round.forEach(({p,mo}) => {
-    const k = `${mo}-${p}`;
-    if (!rndMap[k]) rndMap[k] = [];
-    rndMap[k].push(ri+1);
-  }));
-
-  let html = '<thead><tr><th class="mthead">Model</th>';
-  S.photographers.forEach((n,p) => { html += `<th style="color:${COLORS[p % COLORS.length]}">${n.name}</th>`; });
-  html += '</tr></thead><tbody>';
-
-  S.models.forEach((model, mo) => {
-    html += `<tr><td class="mtd"><div class="mtd-inner">
-      ${avatarImg(model, 'mtd-avatar', 22)}
-      <span class="mtd-name">${model.name}</span>
-    </div></td>`;
-    S.photographers.forEach((_,p) => {
-      const r = rndMap[`${mo}-${p}`];
-      html += r
-        ? `<td><span class="cc done" title="Round ${r.join(',')}">${r[0]}</span></td>`
-        : `<td><span class="cc none">—</span></td>`;
-    });
-    html += '</tr>';
-  });
-  html += '</tbody>';
-  document.getElementById('cov-table').innerHTML = html;
-}
-
 function renderIGContent() {
   const renderList = (items, elementId, type) => {
     document.getElementById(elementId).innerHTML = items.map((item, idx) => {
@@ -884,7 +844,7 @@ function renderSetupInputs() {
   document.querySelectorAll('.photog-name-input').forEach(inp => inp.addEventListener('input', e => {
     const i = parseInt(e.target.dataset.i);
     S.photographers[i].name = e.target.value || `Photographer ${i+1}`;
-    save(); renderRound(); renderProg(); renderCoverage(); renderIGContent();
+    save(); renderRound(); renderProg(); renderIGContent();
   }));
 
   document.querySelectorAll('.photog-ig-input').forEach(inp => inp.addEventListener('change', e => {
@@ -897,13 +857,13 @@ function renderSetupInputs() {
 
   document.querySelectorAll('.photog-avatar-input').forEach(inp => inp.addEventListener('change', e => {
     S.photographers[parseInt(e.target.dataset.i)].avatarUrl = e.target.value.trim();
-    save(); renderSetupInputs(); renderRound(); renderProg(); renderCoverage(); renderIGContent();
+    save(); renderSetupInputs(); renderRound(); renderProg(); renderIGContent();
   }));
 
   document.querySelectorAll('.model-name-input').forEach(inp => inp.addEventListener('input', e => {
     const i = parseInt(e.target.dataset.i);
     S.models[i].name = e.target.value || `Model ${i+1}`;
-    save(); renderRound(); renderCoverage();
+    save(); renderRound();
     // update avatar initials fallback live
     const wrap = e.target.closest('.model-row').querySelector('.model-avatar-wrap');
     const fb = wrap.querySelector('.model-avatar-fallback');
@@ -917,7 +877,7 @@ function renderSetupInputs() {
     S.models[i].handle = extractHandle(url);
     save();
     renderSetupInputs();
-    renderRound(); renderCoverage(); renderIGContent();
+    renderRound(); renderIGContent();
   }));
 
   document.querySelectorAll('.model-avatar-input').forEach(inp => inp.addEventListener('change', e => {
@@ -926,7 +886,7 @@ function renderSetupInputs() {
     S.models[i].avatarUrl = url;
     save();
     renderSetupInputs();
-    renderRound(); renderCoverage(); renderIGContent();
+    renderRound(); renderIGContent();
   }));
 }
 
@@ -1158,7 +1118,7 @@ function nextRound() { if(S.cur<S.rounds.length-1){ S.cur++; save(); render(); }
 function switchTab(name, el) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   el.classList.add('active');
-  ['rounds','coverage','setup','timer','ig','checkin'].forEach(t => {
+  ['rounds','setup','timer','ig','checkin'].forEach(t => {
     document.getElementById(`tab-${t}`).style.display = t===name ? '' : 'none';
   });
   if (name === 'setup') renderSetupInputs();
