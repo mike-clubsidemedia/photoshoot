@@ -508,7 +508,7 @@ table.cov td.mtd { text-align: left; background: var(--surface); white-space: no
 <script>
 const COLORS = ['#b5401a','#1a6ab5','#1a8a4a','#8a1ab5','#b58a1a','#1a8ab5','#b51a6a','#6ab51a','#d4a96a','#4a1a8a'];
 const KEY = 'shoot_v4';
-let supabase = null;
+let sb = null;
 
 // Model data shape: { name, igUrl, handle }
 // handle is derived from igUrl on save
@@ -834,8 +834,9 @@ function renderSetupInputs() {
   S.photographers.forEach((n,i) => {
     const d = document.createElement('div'); d.className = 'model-row';
     d.innerHTML = `
-      <div class="model-avatar-wrap">
+      <div class="model-avatar-wrap" onclick="this.querySelector('input').click()">
         ${avatarImg(n, 'model-avatar', 40)}
+        <input type="file" accept="image/*" capture="camera" style="display:none" onchange="handleFileUpload(this, 'photog', ${i})">
       </div>
       <div class="model-fields">
         <div style="display:flex;align-items:center;gap:6px">
@@ -855,8 +856,9 @@ function renderSetupInputs() {
   S.models.forEach((model, i) => {
     const d = document.createElement('div'); d.className = 'model-row';
     d.innerHTML = `
-      <div class="model-avatar-wrap">
+      <div class="model-avatar-wrap" onclick="this.querySelector('input').click()">
         ${avatarImg(model, 'model-avatar', 40)}
+        <input type="file" accept="image/*" capture="camera" style="display:none" onchange="handleFileUpload(this, 'model', ${i})">
       </div>
       <div class="model-fields">
         <input class="model-name-input" type="text" value="${model.name}" placeholder="Display name" data-t="mname" data-i="${i}">
@@ -919,6 +921,12 @@ function renderSetupInputs() {
   }));
 }
 
+function handleFileUpload(input, type, index) {
+  if (input.files && input.files[0]) {
+    uploadPhoto(input.files[0], type, index);
+  }
+}
+
 // ── SUPABASE SYNC & STORAGE ──────────────────────────────────────────
 async function initSupabaseSync() {
   const url = prompt("Enter Supabase Project URL:");
@@ -926,15 +934,20 @@ async function initSupabaseSync() {
   
   if (!url || !key) return;
   
-  supabase = supabase.createClient(url, key);
+  sb = supabase.createClient(url, key);
   localStorage.setItem('sb_url', url);
   localStorage.setItem('sb_key', key);
   
   document.getElementById('sync-indicator').textContent = "Connected";
   document.getElementById('sync-indicator').style.color = "var(--accent3)";
   
-  // Subscribe to real-time updates
-  supabase.channel('schema-db-changes')
+  setupRealtime();
+  pullFromCloud();
+}
+
+function setupRealtime() {
+  if (!sb) return;
+  sb.channel('schema-db-changes')
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'events' }, payload => {
         if (payload.new.id === 'default-event') {
             S = payload.new.state;
@@ -942,22 +955,20 @@ async function initSupabaseSync() {
         }
     })
     .subscribe();
-
-    pullFromCloud();
 }
 
 async function uploadPhoto(file, type, index) {
-    if (!supabase) return alert("Link Supabase first to upload photos.");
+    if (!sb) return alert("Link Supabase first to upload photos.");
     const ext = file.name.split('.').pop();
     const path = `${type}-${index}-${Date.now()}.${ext}`;
     
-    const { data, error } = await supabase.storage
-        .from('events')
+    const { data, error } = await sb.storage
+        .from('images')
         .upload(path, file);
 
     if (error) return alert("Upload failed: " + error.message);
 
-    const { data: { publicUrl } } = supabase.storage.from('events').getPublicUrl(path);
+    const { data: { publicUrl } } = sb.storage.from('images').getPublicUrl(path);
     
     if (type === 'model') S.models[index].avatarUrl = publicUrl;
     else S.photographers[index].avatarUrl = publicUrl;
@@ -968,10 +979,10 @@ async function uploadPhoto(file, type, index) {
 }
 
 async function pushToCloud() {
-    if (!supabase) return;
+    if (!sb) return;
     const eventId = 'default-event'; // Replace with dynamic ID if supporting multiple events
     
-    await supabase
+    await sb
         .from('events')
         .upsert({ 
             id: eventId, 
@@ -992,8 +1003,8 @@ function save() {
 }
 
 async function pullFromCloud() {
-    if (!supabase) return;
-    const { data, error } = await supabase
+    if (!sb) return;
+    const { data, error } = await sb
         .from('events')
         .select('*')
         .eq('id', 'default-event')
@@ -1182,7 +1193,8 @@ function load() {
     const sbUrl = localStorage.getItem('sb_url');
     const sbKey = localStorage.getItem('sb_key');
     if (sbUrl && sbKey) {
-        supabase = supabase.createClient(sbUrl, sbKey);
+        sb = supabase.createClient(sbUrl, sbKey);
+        setupRealtime();
     }
 
     const d = localStorage.getItem(KEY);
