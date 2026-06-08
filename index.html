@@ -508,6 +508,8 @@ table.cov td.mtd { text-align: left; background: var(--surface); white-space: no
 <script>
 const COLORS = ['#b5401a','#1a6ab5','#1a8a4a','#8a1ab5','#b58a1a','#1a8ab5','#b51a6a','#6ab51a','#d4a96a','#4a1a8a'];
 const KEY = 'shoot_v4';
+const SB_URL = 'https://imvcmyfjnelyeftxmypg.supabase.co'; // Paste your Supabase Project URL here
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImltdmNteWZqbmVseWVmdHhteXBnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA4NjMwMDUsImV4cCI6MjA5NjQzOTAwNX0.hMrllp2m1Qw2HHv5Cr8yxtHmmWOC6nI2TTYbLlYk4Wc'; // Paste your Supabase Anon Key here
 let sb = null;
 
 // Model data shape: { name, igUrl, handle }
@@ -932,21 +934,33 @@ function handleFileUpload(input, type, index) {
 }
 
 // ── SUPABASE SYNC & STORAGE ──────────────────────────────────────────
-async function initSupabaseSync() {
-  const url = prompt("Enter Supabase Project URL:");
-  const key = prompt("Enter Supabase Anon Key:");
+async function initSupabaseSync(url, key, silent = false) {
+  url = url || SB_URL || prompt("Enter Supabase Project URL:");
+  key = key || SB_KEY || prompt("Enter Supabase Anon Key:");
   
   if (!url || !key) return;
   
-  sb = supabase.createClient(url, key);
-  localStorage.setItem('sb_url', url);
-  localStorage.setItem('sb_key', key);
-  
-  document.getElementById('sync-indicator').textContent = "Connected";
-  document.getElementById('sync-indicator').style.color = "var(--accent3)";
-  
-  setupRealtime();
-  pullFromCloud();
+  try {
+    const client = window.supabase.createClient(url, key);
+    // Perform a lightweight check to see if the credentials work
+    const { error } = await client.from('events').select('id').limit(1);
+    
+    if (error) throw error;
+
+    sb = client;
+    localStorage.setItem('sb_url', url);
+    localStorage.setItem('sb_key', key);
+    
+    document.getElementById('sync-indicator').textContent = "Connected";
+    document.getElementById('sync-indicator').style.color = "var(--accent3)";
+    
+    setupRealtime();
+    await pullFromCloud();
+    if (!silent) alert("Successfully linked to Supabase!");
+  } catch (err) {
+    console.error("Supabase connection failed:", err);
+    if (!silent) alert("Failed to connect to Supabase. Please check your URL and Key.");
+  }
 }
 
 function setupRealtime() {
@@ -1209,11 +1223,11 @@ function timerRenderRoundLabel() {
 function load() {
   try {
     // Auto-init Supabase if keys exist
-    const sbUrl = localStorage.getItem('sb_url');
-    const sbKey = localStorage.getItem('sb_key');
+    const sbUrl = SB_URL || localStorage.getItem('sb_url');
+    const sbKey = SB_KEY || localStorage.getItem('sb_key');
+    
     if (sbUrl && sbKey) {
-        sb = supabase.createClient(sbUrl, sbKey);
-        setupRealtime();
+        initSupabaseSync(sbUrl, sbKey, true);
     }
 
     const d = localStorage.getItem(KEY);
