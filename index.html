@@ -941,7 +941,13 @@ async function initSupabaseSync(url, key, silent = false) {
   if (!url || !key) return;
   
   try {
-    const client = window.supabase.createClient(url, key);
+    // If already connected with same creds, just ensure realtime is on
+    if (sb && localStorage.getItem('sb_url') === url) {
+        setupRealtime();
+        return;
+    }
+
+    const client = supabase.createClient(url, key);
     // Perform a lightweight check to see if the credentials work
     const { error } = await client.from('events').select('id').limit(1);
     
@@ -955,24 +961,39 @@ async function initSupabaseSync(url, key, silent = false) {
     document.getElementById('sync-indicator').style.color = "var(--accent3)";
     
     setupRealtime();
-    await pullFromCloud();
+    pullFromCloud();
     if (!silent) alert("Successfully linked to Supabase!");
   } catch (err) {
     console.error("Supabase connection failed:", err);
-    if (!silent) alert("Failed to connect to Supabase. Please check your URL and Key.");
+    document.getElementById('sync-indicator').textContent = "Connection Error";
   }
 }
 
 function setupRealtime() {
   if (!sb) return;
-  sb.channel('schema-db-changes')
-    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'events' }, payload => {
-        if (payload.new.id === 'default-event') {
-            S = payload.new.state;
-            render();
+  
+  // Clean up existing subscriptions to avoid duplicates
+  sb.removeAllChannels();
+
+  sb.channel('db-sync')
+    .on('postgres_changes', 
+        { event: 'UPDATE', schema: 'public', table: 'events', filter: 'id=eq.default-event' }, 
+        payload => {
+            if (payload.new && payload.new.state) {
+                // Only update if state is actually different to avoid render loops
+                if (JSON.stringify(S) !== JSON.stringify(payload.new.state)) {
+                    S = payload.new.state;
+                    localStorage.setItem(KEY, JSON.stringify(S));
+                    render();
+                }
+            }
         }
-    })
-    .subscribe();
+    )
+    .subscribe(status => {
+        if (status === 'SUBSCRIBED') {
+            document.getElementById('sync-indicator').textContent = "Live Sync Active";
+        }
+    });
 }
 
 async function uploadPhoto(file, type, index) {
