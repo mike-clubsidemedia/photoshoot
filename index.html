@@ -619,7 +619,8 @@ function addRound() {
 
 function rebuildSchedule() {
   S.rounds = []; S.done = {}; S.cur = 0;
-  for (let i=0;i<S.models.length;i++) addRoundSilent();
+  const activeCount = S.models.filter(m => m.isPresent).length;
+  for (let i=0;i<activeCount;i++) addRoundSilent();
   save(); render();
 }
 
@@ -636,6 +637,7 @@ function toggle(ri, p, mo) {
 // ── RENDER ───────────────────────────────────────────────────────────
 function render() {
   renderSetupInputs();
+  renderCheckin();
   renderStats();
   renderDots();
   renderRound();
@@ -647,8 +649,8 @@ function render() {
 }
 
 function renderStats() {
-  const NP = S.photographers.length;
-  const NM = S.models.length;
+  const NP = S.photographers.filter(p => p.isPresent).length;
+  const NM = S.models.filter(m => m.isPresent).length;
   let done = 0, total = S.rounds.reduce((a,r) => a+r.length, 0);
   Object.values(S.done).forEach(s => { if(s.done) done++; });
   const mat = metMatrix();
@@ -716,7 +718,7 @@ function renderRound() {
   const mat = getDoneMatrix();
   const tots = mat.map(row => row.reduce((a,b) => a+b, 0));
   const waiting = [];
-  for (let m=0;m<NM;m++) if (!active.has(m)) waiting.push(m);
+  for (let m=0;m<NM;m++) if (!active.has(m) && S.models[m].isPresent) waiting.push(m);
   waiting.sort((a,b) => tots[a] - tots[b]);
   const minTot = tots[waiting[0]] ?? 0;
 
@@ -736,6 +738,7 @@ function renderProg() {
   const mat = getDoneMatrix();
   const NM = S.models.length;
   document.getElementById('prog-bars').innerHTML = S.photographers.map((photog,p) => {
+    if (!photog.isPresent) return '';
     const cnt = mat.reduce((a,row) => a+(row[p]>0?1:0), 0);
     const pct = Math.round(cnt/NM*100);
     return `<div class="prog-card">
@@ -781,6 +784,7 @@ function renderCoverage() {
 function renderIGContent() {
   const renderList = (items, elementId, type) => {
     document.getElementById(elementId).innerHTML = items.map((item, idx) => {
+      if (!item.isPresent) return '';
       const id = `${type}-${idx}`;
       const isSelected = selectedIG.has(id) ? 'selected' : '';
       return `
@@ -1025,7 +1029,9 @@ function addPhotographer() {
 
 function renderCheckin() {
     const renderList = (items, elementId, type) => {
-        document.getElementById(elementId).innerHTML = items.map((item, i) => `
+        const el = document.getElementById(elementId);
+        if (!el) return;
+        el.innerHTML = items.map((item, i) => `
             <div class="checkin-card ${item.isPresent ? '' : 'absent'}">
                 <div class="checkin-info">
                     ${avatarImg(item, 'mtd-avatar', 32)}
@@ -1043,6 +1049,19 @@ function renderCheckin() {
 function togglePresence(type, i) {
     if (type === 'model') S.models[i].isPresent = !S.models[i].isPresent;
     else S.photographers[i].isPresent = !S.photographers[i].isPresent;
+
+    // Automatically re-calculate current and future rounds to reflect updated attendance
+    if (S.rounds.length > 0) {
+        const ri = S.cur;
+        const totalRounds = S.rounds.length;
+        // Reset schedule from the current round onwards
+        S.rounds = S.rounds.slice(0, ri); 
+        // Regenerate everything from the current slot to the end
+        for (let j = ri; j < totalRounds; j++) {
+            S.rounds.push(genRound());
+        }
+    }
+
     save(); render();
 }
 
