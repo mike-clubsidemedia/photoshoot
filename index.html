@@ -6,6 +6,7 @@
 <title>Shoot Rotation</title>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=IBM+Plex+Mono:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
+/* Existing styles... */
 :root {
   --bg: #f5f0e8;
   --surface: #ece6d8;
@@ -124,6 +125,27 @@ header h1 em { font-style: italic; color: #d4a96a; }
 .model-avatar-input:focus { border-color: var(--accent3); color: var(--ink); }
 .avatar-preview-ok { font-size: 0.55rem; color: var(--accent3); padding: 0 2px; }
 .avatar-preview-err { font-size: 0.55rem; color: var(--accent); padding: 0 2px; }
+
+/* ── CHECK-IN LIST ── */
+.checkin-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
+.checkin-card {
+  background: var(--card); border: 1px solid var(--border); border-radius: 3px;
+  padding: 12px; display: flex; align-items: center; justify-content: space-between;
+  box-shadow: var(--shadow); transition: opacity 0.2s;
+}
+.checkin-card.absent { opacity: 0.5; filter: grayscale(1); }
+.checkin-info { display: flex; align-items: center; gap: 10px; }
+.toggle-switch {
+  position: relative; width: 40px; height: 20px;
+  appearance: none; background: var(--border); border-radius: 10px;
+  cursor: pointer; outline: none; transition: 0.3s;
+}
+.toggle-switch:checked { background: var(--accent3); }
+.toggle-switch::before {
+  content: ''; position: absolute; width: 16px; height: 16px; border-radius: 50%;
+  top: 2px; left: 2px; background: white; transition: 0.3s;
+}
+.toggle-switch:checked::before { left: 22px; }
 
 /* ── BUTTONS ── */
 .btn {
@@ -315,6 +337,7 @@ table.cov td.mtd { text-align: left; background: var(--surface); white-space: no
 
 <div class="tabs">
   <button class="tab active" onclick="switchTab('rounds',this)">Rounds</button>
+  <button class="tab" onclick="switchTab('checkin',this)">Check-in</button>
   <button class="tab" onclick="switchTab('coverage',this)">Coverage Map</button>
   <button class="tab" onclick="switchTab('ig',this)">IG Content</button>
   <button class="tab" onclick="switchTab('timer',this)">Timer</button>
@@ -342,21 +365,28 @@ table.cov td.mtd { text-align: left; background: var(--surface); white-space: no
       <button class="btn" onclick="showModal()">✕ Reset All Progress</button>
     </div>
 
-    <div class="section-title">Manual Data Sync</div>
+    <div class="section-title">Supabase Cloud Sync</div>
     <div class="names-panel" style="margin-bottom:18px">
-      <div class="info-box" style="margin-bottom:12px; border-left-color: var(--accent);">
-        <strong>Transfer State:</strong> To move your setup to another browser, click <strong>Copy State</strong>, then paste that text into the box on the other device and click <strong>Import</strong>.
-      </div>
-      <textarea id="sync-data" class="name-input" style="height:80px; font-size:0.55rem; margin-bottom:10px; resize:none;" placeholder="JSON state will appear here..."></textarea>
-      <div class="btn-row" style="margin-bottom:0">
-        <button class="btn sm" onclick="exportState()">📋 Copy State to Clipboard</button>
-        <button class="btn sm primary" onclick="importState()">📥 Import State</button>
-      </div>
+        <div id="supabase-status" style="font-size:0.65rem; margin-bottom:10px; color: var(--muted);">
+            Status: <span id="sync-indicator">Local Only</span>
+        </div>
+        <div class="btn-row" style="margin-bottom:0">
+            <button class="btn sm primary" onclick="initSupabaseSync()">Link Supabase Project</button>
+            <button class="btn sm" onclick="pushToCloud()">↑ Push Local to Cloud</button>
+        </div>
     </div>
 
     <div class="info-box">
       <strong>Model fields:</strong> Enter a display name and Instagram link. For avatars, you can paste a web URL or use a local image by creating an <code>images</code> folder in your project and typing the path (e.g., <code>images/jane.jpg</code>).
     </div>
+  </div>
+
+  <!-- CHECK-IN -->
+  <div id="tab-checkin" style="display:none">
+    <div class="section-title">Photographer Attendance</div>
+    <div id="checkin-photographers" class="checkin-list" style="margin-bottom:24px"></div>
+    <div class="section-title">Model Attendance</div>
+    <div id="checkin-models" class="checkin-list"></div>
   </div>
 
   <!-- ROUNDS -->
@@ -474,16 +504,18 @@ table.cov td.mtd { text-align: left; background: var(--surface); white-space: no
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 const COLORS = ['#b5401a','#1a6ab5','#1a8a4a','#8a1ab5','#b58a1a','#1a8ab5','#b51a6a','#6ab51a','#d4a96a','#4a1a8a'];
 const KEY = 'shoot_v4';
+let supabase = null;
 
 // Model data shape: { name, igUrl, handle }
 // handle is derived from igUrl on save
 
 let S = {
-  photographers: Array.from({length:5}, (_,i) => ({ name: `Photographer ${i+1}`, igUrl: '', handle: '', avatarUrl: '' })),
-  models: Array.from({length:11}, (_,i) => ({ name: `Model ${i+1}`, igUrl: '', handle: '', avatarUrl: '' })),
+  photographers: Array.from({length:5}, (_,i) => ({ name: `Photographer ${i+1}`, igUrl: '', handle: '', avatarUrl: '', isPresent: true })),
+  models: Array.from({length:11}, (_,i) => ({ name: `Model ${i+1}`, igUrl: '', handle: '', avatarUrl: '', isPresent: true })),
   rounds: [],
   done: {},
   cur: 0
@@ -559,9 +591,12 @@ function getDoneMatrix() {
 function genRound() {
   const mat = metMatrix();
   const totals = mat.map(row => row.reduce((a,b) => a+b, 0));
+  const activeModels = S.models.map((m, i) => m.isPresent ? i : -1).filter(i => i !== -1);
+  const activePhotogs = S.photographers.map((p, i) => p.isPresent ? i : -1).filter(i => i !== -1);
+
   let cands = [];
-  for (let p=0;p<S.photographers.length;p++)
-    for (let mo=0;mo<S.models.length;mo++)
+  for (let p of activePhotogs)
+    for (let mo of activeModels)
       cands.push({p, mo, score: mat[mo][p]*10000 + totals[mo]});
   cands.sort((a,b) => a.score - b.score);
   const used = new Set(), usedP = new Set(), pairs = [];
@@ -569,7 +604,7 @@ function genRound() {
     if (usedP.has(p) || used.has(mo)) continue;
     pairs.push({p, mo});
     usedP.add(p); used.add(mo);
-    if (pairs.length === S.photographers.length) break;
+    if (pairs.length === activePhotogs.length) break;
   }
   return pairs;
 }
@@ -884,32 +919,91 @@ function renderSetupInputs() {
   }));
 }
 
-// ── MANUAL SYNC ──────────────────────────────────────────────────────
-function exportState() {
-  const data = JSON.stringify(S);
-  const area = document.getElementById('sync-data');
-  area.value = data;
-  area.select();
-  navigator.clipboard.writeText(data);
-  alert("State copied to clipboard! You can now paste this on another device.");
+// ── SUPABASE SYNC & STORAGE ──────────────────────────────────────────
+async function initSupabaseSync() {
+  const url = prompt("Enter Supabase Project URL:");
+  const key = prompt("Enter Supabase Anon Key:");
+  
+  if (!url || !key) return;
+  
+  supabase = supabase.createClient(url, key);
+  localStorage.setItem('sb_url', url);
+  localStorage.setItem('sb_key', key);
+  
+  document.getElementById('sync-indicator').textContent = "Connected";
+  document.getElementById('sync-indicator').style.color = "var(--accent3)";
+  
+  // Subscribe to real-time updates
+  supabase.channel('schema-db-changes')
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'events' }, payload => {
+        if (payload.new.id === 'default-event') {
+            S = payload.new.state;
+            render();
+        }
+    })
+    .subscribe();
+
+    pullFromCloud();
 }
 
-function importState() {
-  const area = document.getElementById('sync-data');
-  const raw = area.value.trim();
-  if (!raw) return alert("Please paste the state JSON first.");
-
-  try {
-    const imported = JSON.parse(raw);
-    if (!imported.photographers || !imported.models) throw new Error("Invalid format");
+async function uploadPhoto(file, type, index) {
+    if (!supabase) return alert("Link Supabase first to upload photos.");
+    const ext = file.name.split('.').pop();
+    const path = `${type}-${index}-${Date.now()}.${ext}`;
     
-    S = imported;
+    const { data, error } = await supabase.storage
+        .from('events')
+        .upload(path, file);
+
+    if (error) return alert("Upload failed: " + error.message);
+
+    const { data: { publicUrl } } = supabase.storage.from('events').getPublicUrl(path);
+    
+    if (type === 'model') S.models[index].avatarUrl = publicUrl;
+    else S.photographers[index].avatarUrl = publicUrl;
+    
     save();
     render();
-    alert("State imported successfully!");
-  } catch (e) {
-    alert("Error importing: Make sure you pasted the exact text from the other browser.");
-  }
+    pushToCloud();
+}
+
+async function pushToCloud() {
+    if (!supabase) return;
+    const eventId = 'default-event'; // Replace with dynamic ID if supporting multiple events
+    
+    await supabase
+        .from('events')
+        .upsert({ 
+            id: eventId, 
+            state: S,
+            updated_at: new Date() 
+        });
+}
+
+let syncTimeout;
+function debouncedPush() {
+    clearTimeout(syncTimeout);
+    syncTimeout = setTimeout(pushToCloud, 1000);
+}
+
+function save() { 
+    localStorage.setItem(KEY, JSON.stringify(S)); 
+    debouncedPush();
+}
+
+async function pullFromCloud() {
+    if (!supabase) return;
+    const { data, error } = await supabase
+        .from('events')
+        .select('*')
+        .eq('id', 'default-event')
+        .single();
+
+    if (data && data.state) {
+        S = data.state;
+        localStorage.setItem(KEY, JSON.stringify(S));
+        render();
+    }
 }
 
 // ── ADD/REMOVE ───────────────────────────────────────────────────────
@@ -917,6 +1011,30 @@ function addPhotographer() {
   S.photographers.push({ name: `Photographer ${S.photographers.length + 1}`, avatarUrl: '' });
   save(); renderSetupInputs(); render();
 }
+
+function renderCheckin() {
+    const renderList = (items, elementId, type) => {
+        document.getElementById(elementId).innerHTML = items.map((item, i) => `
+            <div class="checkin-card ${item.isPresent ? '' : 'absent'}">
+                <div class="checkin-info">
+                    ${avatarImg(item, 'mtd-avatar', 32)}
+                    <span class="mtd-name">${item.name}</span>
+                </div>
+                <input type="checkbox" class="toggle-switch" ${item.isPresent ? 'checked' : ''} 
+                    onchange="togglePresence('${type}', ${i})">
+            </div>
+        `).join('');
+    };
+    renderList(S.photographers, 'checkin-photographers', 'photog');
+    renderList(S.models, 'checkin-models', 'model');
+}
+
+function togglePresence(type, i) {
+    if (type === 'model') S.models[i].isPresent = !S.models[i].isPresent;
+    else S.photographers[i].isPresent = !S.photographers[i].isPresent;
+    save(); render();
+}
+
 function removePhotographer(i) {
   if (S.photographers.length <= 1) return;
   S.photographers.splice(i, 1);
@@ -940,10 +1058,11 @@ function nextRound() { if(S.cur<S.rounds.length-1){ S.cur++; save(); render(); }
 function switchTab(name, el) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   el.classList.add('active');
-  ['rounds','coverage','setup','timer','ig'].forEach(t => {
+  ['rounds','coverage','setup','timer','ig','checkin'].forEach(t => {
     document.getElementById(`tab-${t}`).style.display = t===name ? '' : 'none';
   });
   if (name === 'setup') renderSetupInputs();
+  if (name === 'checkin') renderCheckin();
   if (name === 'timer') timerRenderRoundLabel();
   if (name === 'ig') renderIGContent();
 }
@@ -1057,15 +1176,22 @@ function timerRenderRoundLabel() {
 }
 
 // ── PERSIST ──────────────────────────────────────────────────────────
-function save() { localStorage.setItem(KEY, JSON.stringify(S)); }
 function load() {
   try {
+    // Auto-init Supabase if keys exist
+    const sbUrl = localStorage.getItem('sb_url');
+    const sbKey = localStorage.getItem('sb_key');
+    if (sbUrl && sbKey) {
+        supabase = supabase.createClient(sbUrl, sbKey);
+    }
+
     const d = localStorage.getItem(KEY);
     if (d) S = JSON.parse(d);
     // Migrate old model shapes
     S.models = S.models.map((m,i) => {
       if (typeof m === 'string') return { name: m, igUrl: '', handle: '', avatarUrl: '' };
       if (!('avatarUrl' in m)) m.avatarUrl = '';
+      if (!('isPresent' in m)) m.isPresent = true;
       return m;
     });
     // Migrate old photographer shapes
@@ -1073,6 +1199,7 @@ function load() {
       if (typeof p === 'string') return { name: p, avatarUrl: '' };
       if (!('igUrl' in p)) p.igUrl = '';
       if (!('handle' in p)) p.handle = '';
+      if (!('isPresent' in p)) p.isPresent = true;
       return p;
     });
   } catch(e) {}
